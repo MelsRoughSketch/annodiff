@@ -1,0 +1,110 @@
+[
+  {
+    "package": "ratatui-termina@0.1.0",
+    "documents": [
+      {
+        "source": "https://raw.githubusercontent.com/ratatui/ratatui/e665c36cb14752a61cd777fbd06dbef8474f2add/LICENSE",
+        "text": "The MIT License (MIT)\n\nCopyright (c) 2016-2022 Florian Dehau\nCopyright (c) 2023-2025 The Ratatui Developers\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.\n"
+      }
+    ]
+  },
+  {
+    "package": "vtparse@0.6.2",
+    "documents": [
+      {
+        "source": "https://raw.githubusercontent.com/wez/wezterm/edeae72b5fc55c7fa4aa1d08bbefd08c5493f757/LICENSE.md",
+        "text": "MIT License\n\nCopyright (c) 2018-Present Wez Furlong\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.\n\nWezTerm bundles `JetBrains Mono`, `Noto Color Emoji` and `Roboto` fonts.\nThose are distributed under the terms of the OFL 1.1, the text of which\ncan be found in the assets/fonts directory.\n\nWezTerm bundles `Symbols Nerd Font Mono`, built from only those icon sets\navailable from https://github.com/ryanoasis/nerd-fonts which are clearly\ndistributed under the terms of the OFL 1.1.\nNote that WezTerm excludes the Pomicons icon set from this collection.\n"
+      }
+    ]
+  },
+  {
+    "package": "wezterm-input-types@0.1.0",
+    "documents": [
+      {
+        "source": "https://raw.githubusercontent.com/wez/wezterm/d5ca5509b95edc31291ba29bd1fcbf3f0b12c92d/LICENSE.md",
+        "text": "MIT License\n\nCopyright (c) 2018-Present Wez Furlong\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.\n\nWezTerm bundles `JetBrains Mono`, `Noto Color Emoji` and `Roboto` fonts.\nThose are distributed under the terms of the OFL 1.1, the text of which\ncan be found in the assets/fonts directory.\n\nWezTerm bundles `Symbols Nerd Font Mono`, built from only those icon sets\navailable from https://github.com/ryanoasis/nerd-fonts which are clearly\ndistributed under the terms of the OFL 1.1.\nNote that WezTerm excludes the Pomicons icon set from this collection.\n"
+      }
+    ]
+  },
+  {
+    "package": "winapi-i686-pc-windows-gnu@0.4.0",
+    "documents": [
+      {
+        "source": "https://docs.rs/crate/winapi-i686-pc-windows-gnu/0.4.0/source/src/lib.rs",
+        "text": "// Copyright © 2016 winapi-rs developers\n// Licensed under the Apache License, Version 2.0\n// <LICENSE-APACHE or http://www.apache.org/licenses/LICENSE-2.0> or the MIT license\n// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your option.\n// All files in the project carrying such notice may not be copied, modified, or distributed\n// except according to those terms.\n"
+      },
+      {
+        "source": "https://docs.rs/crate/winapi/0.3.9/source/LICENSE-MIT",
+        "text": "Copyright (c) 2015-2018 The winapi-rs Developers\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.\n"
+      }
+    ]
+  },
+  {
+    "package": "winapi-x86_64-pc-windows-gnu@0.4.0",
+    "documents": [
+      {
+        "source": "https://docs.rs/crate/winapi-x86_64-pc-windows-gnu/0.4.0/source/src/lib.rs",
+        "text": "// Copyright © 2016 winapi-rs developers\n// Licensed under the Apache License, Version 2.0\n// <LICENSE-APACHE or http://www.apache.org/licenses/LICENSE-2.0> or the MIT license\n// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your option.\n// All files in the project carrying such notice may not be copied, modified, or distributed\n// except according to those terms.\n"
+      },
+      {
+        "source": "https://docs.rs/crate/winapi/0.3.9/source/LICENSE-MIT",
+        "text": "Copyright (c) 2015-2018 The winapi-rs Developers\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.\n"
+      }
+    ]
+  },
+  {
+    "package": "syntect@5.3.0",
+    "asset_sha256": {
+      "default.themedump": "8b57a2118224993360b6fc5fc2fa2e9872a827f00f9c57d43da08fa42c892399",
+      "default_metadata.packdump": "b1df0402dfdb84b9826b206bffafb35553c46530afcbb3c929147760056766f3",
+      "default_newlines.packdump": "d740b20c12e40b678b9f1012401e1969aaa5cd55f1ab329ffeb94d746b06a5c0",
+      "default_nonewlines.packdump": "b61623ff9b5c36e60666d637076697ad8234116b2d53ad2ee9e3908df1c2461d"
+    },
+    "documents": [
+      {
+        "source": "https://github.com/sublimehq/Packages/blob/fa6b8629c95041bf262d4c1dab95c456a0530122/LICENSE",
+        "text": "If not otherwise specified (see below), files in this repository fall under the following license:\n\n    Permission to copy, use, modify, sell and distribute this\n    software is granted. This software is provided \"as is\" without\n    express or implied warranty, and with no claim as to its\n    suitability for any purpose.\n\nAn exception is made for files in readable text which contain their own license information, or files where an accompanying file exists (in the same directory) with a “-license” suffix added to the base-name name of the original file, and an extension of txt, html, or similar. For example “tidy” is accompanied by “tidy-license.txt”.\n"
+      },
+      {
+        "source": "https://github.com/sublimehq/Packages/blob/fa6b8629c95041bf262d4c1dab95c456a0530122/Rust/LICENSE.txt",
+        "text": "Permission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in\nall copies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN\nTHE SOFTWARE.\n"
+      },
+      {
+        "source": "https://github.com/sublimehq/Packages/blob/fa6b8629c95041bf262d4c1dab95c456a0530122/C%23/C%23.sublime-syntax",
+        "text": "http://www.sublimetext.com/docs/3/syntax.html\nCopyright (c) 2016 Sublime Text HQ Pty, @gwenzek,\n    Matthew Winter @wintermi, Adam Lickel @lickel\nMIT license: https://opensource.org/licenses/mit-license.php\n"
+      },
+      {
+        "source": "https://github.com/sublimehq/Packages/blob/fa6b8629c95041bf262d4c1dab95c456a0530122/YAML/YAML.sublime-syntax",
+        "text": "The MIT License (MIT)\n\nCopyright (c) 2015 FichteFoll <fichtefoll2@googlemail.com>\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to\ndeal in the Software without restriction, including without limitation the\nrights to use, copy, modify, merge, publish, distribute, sublicense, and/or\nsell copies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in\nall copies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING\nFROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS\nIN THE SOFTWARE.\n\n\nThis syntax definition\nis based on http://yaml.org/spec/1.2/spec.html,\nwhich also serves as a base for variables.\nReferences have been included where appropriate.\n\nAcknowledgements:\n- Most indentation is not checked,\n  except for block scalars,\n  where it is also not verified\n  (i.e. highlights even if less indentation used than required).\n- Properties are sometimes incorrectly highlighted\n  for nested block collections (`- !!seq -`).\n"
+      },
+      {
+        "source": "https://github.com/sethlopezme/InspiredGitHub.tmtheme/blob/18ddb271179e118cfc2dd83abf88b915b7328a25/LICENSE",
+        "text": "The MIT License (MIT)\n\nCopyright (c) 2015 Seth Lopez\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.\n\n"
+      },
+      {
+        "source": "https://github.com/braver/Solarized/blob/bcd6234b4f5f96d3fd27db079268b5757053072a/LICENSE",
+        "text": "The MIT License (MIT)\n\nCopyright (c) 2016 Koen Lageveen\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.\n"
+      },
+      {
+        "source": "https://github.com/kkga/spacegray/blob/2703e93f559e212ef3895edd10d861a4383ce93d/LICENSE",
+        "text": "The MIT License (MIT)\n\nCopyright (c) 2013 Gadzhi Kharkharov\n\nPermission is hereby granted, free of charge, to any person obtaining a copy of\nthis software and associated documentation files (the \"Software\"), to deal in\nthe Software without restriction, including without limitation the rights to\nuse, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of\nthe Software, and to permit persons to whom the Software is furnished to do so,\nsubject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS\nFOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR\nCOPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER\nIN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN\nCONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.\n"
+      },
+      {
+        "source": "https://github.com/kkga/spacegray/blob/2703e93f559e212ef3895edd10d861a4383ce93d/base16-eighties.dark.tmTheme",
+        "text": "Base16 Eighties Dark\nAuthor: Chris Kempson (http://chriskempson.com)\n"
+      },
+      {
+        "source": "https://github.com/kkga/spacegray/blob/2703e93f559e212ef3895edd10d861a4383ce93d/base16-mocha.dark.tmTheme",
+        "text": "Base16 Mocha Dark\nAuthor: Chris Kempson (http://chriskempson.com)\n"
+      },
+      {
+        "source": "https://github.com/kkga/spacegray/blob/2703e93f559e212ef3895edd10d861a4383ce93d/base16-ocean.dark.tmTheme",
+        "text": "Base16 Ocean Dark\nAuthor: Chris Kempson (http://chriskempson.com)\n"
+      },
+      {
+        "source": "https://github.com/kkga/spacegray/blob/2703e93f559e212ef3895edd10d861a4383ce93d/base16-ocean.light.tmTheme",
+        "text": "Base16 Ocean Light\nAuthor: Chris Kempson (http://chriskempson.com)\n"
+      }
+    ]
+  }
+]

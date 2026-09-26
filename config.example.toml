@@ -1,0 +1,14 @@
+# annodiff creates this file as config.toml on first TUI startup.
+# Restart annodiff after changing it.
+
+# Agent response language, including reviews copied to the clipboard.
+# Values (case-insensitive): "en" for English, "jp" or "ja" for Japanese.
+# Empty or omitted: keep the agent's default. The TUI remains English.
+response_language = ""
+
+# Environment variables (set in your shell, not as TOML keys):
+# VISUAL / EDITOR: external editor; VISUAL takes priority, then EDITOR,
+#                 falling back to vi. Example: export VISUAL=hx
+# CODEX_HOME: Codex data directory; defaults to ~/.codex.
+# XDG_CONFIG_HOME: Linux config directory; defaults to ~/.config.
+#                  annodiff reads annodiff/config.toml under this directory.

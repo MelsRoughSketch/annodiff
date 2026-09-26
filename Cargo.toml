@@ -1,0 +1,38 @@
+[package]
+name = "annodiff"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.88"
+license = "MIT"
+repository = "https://github.com/MelsRoughSketch/annodiff"
+readme = "README.md"
+exclude = ["benchmarks/results/**"]
+description = "A terminal UI for annotating Git diffs and sending reviews to coding agents"
+
+[dependencies]
+anyhow = "1"
+base64 = "0.22"
+crossterm = "0.29"
+fs2 = "0.4.3"
+ratatui = "0.30.2"
+ratatui-textarea = "0.9.2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+syntect = { version = "5.3", default-features = false, features = ["default-fancy"] }
+tempfile = "3"
+toml = "1"
+tungstenite = { version = "0.30", default-features = false, features = ["handshake"] }
+unicode-segmentation = "1.13"
+unicode-width = "0.2"
+
+[[bench]]
+name = "baseline"
+harness = false
+
+[[bench]]
+name = "file_scroll"
+harness = false
+
+[[bench]]
+name = "interactions"
+harness = false
