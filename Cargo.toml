@@ -11,7 +11,7 @@ description = "A terminal UI for annotating Git diffs and sending reviews to cod
 
 [dependencies]
 anyhow = "1"
-base64 = "0.22"
+base64 = "0.23"
 crossterm = "0.29"
 fs2 = "0.4.3"
 ratatui = "0.30.2"
