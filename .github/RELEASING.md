@@ -1,6 +1,7 @@
 # CI and crates.io releases
 
-CI runs on branch pushes, pull requests, and manual dispatches. It checks Rust
+CI runs on pushes to `main`, pull requests, and manual dispatches. Feature branch
+pushes are checked through their PR, avoiding duplicate runs. It checks Rust
 formatting, Clippy, unit/integration tests, CLI and PTY interactions, and license
 notices on Linux. A separate job checks all targets and builds the packaged crate
 with the minimum supported Rust version, 1.88.0. Benchmarks are compiled, but

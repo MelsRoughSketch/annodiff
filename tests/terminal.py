@@ -7,6 +7,7 @@ from pathlib import Path
 import pty
 import re
 import select
+import signal
 import struct
 import subprocess
 import sys
@@ -18,6 +19,11 @@ repo = Path(__file__).resolve().parents[1]
 subprocess.run(["cargo", "build", "--manifest-path", str(repo / "Cargo.toml"),
                 "--locked", "--offline"], check=True)
 binary = repo / "target/debug/annodiff"
+
+
+def attach_terminal():
+    # Give the child session a controlling terminal, as a real terminal would.
+    fcntl.ioctl(0, termios.TIOCSCTTY, 0)
 
 with tempfile.TemporaryDirectory(prefix="annodiff-terminal-") as directory:
     directory = Path(directory)
@@ -63,18 +69,25 @@ print("fake-editor-finished", flush=True)
     for case, (failure, save_key, size) in enumerate(cases):
         root = directory / f"repo{case}"
         root.mkdir()
-        subprocess.run(["git", "init", "-q", str(root)], check=True)
-        (root / "sample.go").write_text('package main\nfunc main() {}\n')
         payload = directory / f"payload{case}.md"
         env = dict(os.environ, TERM="xterm-256color", PATH=str(tools) + os.pathsep + os.environ["PATH"],
                    VISUAL=str(editor), CODEX_HOME=str(directory / "codex-home"),
                    XDG_CONFIG_HOME=str(config.parent), FAKE_PAYLOAD=str(payload), FAKE_FAIL=str(failure),
                    GIT_CONFIG_GLOBAL="/dev/null", GIT_CONFIG_SYSTEM="/dev/null")
+        subprocess.run(["git", "init", "-q", str(root)], env=env, check=True)
+        (root / "sample.go").write_text('package main\nfunc main() {}\n')
+        if case == 0:
+            subprocess.run(["git", "-C", str(root), "add", "sample.go"], env=env, check=True)
+            subprocess.run(["git", "-C", str(root), "-c", "user.name=E2E", "-c",
+                            "user.email=e2e@example.invalid", "-c", "commit.gpgsign=false",
+                            "commit", "-qm", "initial"], env=env, check=True)
+            (root / "sample.go").write_text('package main\nfunc main() { println("changed") }\n')
+            (root / "new.txt").write_text("untracked content\n")
         master, slave = pty.openpty()
         fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack("HHHH", 30, 120, 0, 0))
         original = termios.tcgetattr(slave)
         process = subprocess.Popen([str(binary), str(root)], stdin=slave, stdout=slave, stderr=slave,
-                                   env=env, start_new_session=True)
+                                   env=env, start_new_session=True, preexec_fn=attach_terminal)
         output = bytearray()
 
         def pump(duration=0.1):
@@ -93,23 +106,82 @@ print("fake-editor-finished", flush=True)
                     break
                 output.extend(data)
 
-        def wait_for(predicate):
+        def wait_for(predicate, description="expected state"):
             deadline = time.monotonic() + 15
             while not predicate():
-                pump()
                 if process.poll() is not None or time.monotonic() > deadline:
-                    raise AssertionError(output.decode("utf-8", errors="replace")[-6000:])
+                    raise AssertionError(description)
+                pump()
 
         def send(value):
-            os.write(master, value.encode("utf-8"))
-            pump(0.2)
+            data = value.encode("utf-8")
+            while data:
+                data = data[os.write(master, data):]
+
+        def wait_state(predicate):
+            wait_for(lambda: state.exists() and predicate(json.loads(state.read_text())),
+                     "saved review update")
+            return json.loads(state.read_text())
+
+        def check_navigation():
+            send("?")
+            send("/wrapping\r")
+            send("q")  # Closes help without quitting.
+            assert process.poll() is None
+            send("1s")
+            wait_state(lambda saved: saved.get("Split") is True)
+            send("/new.txt\r")
+            send("c")
+            send("untracked-e2e")
+            send("\x1bOQ")
+            saved = wait_state(lambda saved: any(
+                c["Text"] == "untracked-e2e" for f in saved["Files"] for c in f["Comments"]))
+            new_file = next(f for f in saved["Files"] if f["Path"] == "new.txt")
+            assert new_file["Comments"][0]["File"] is True
+            assert new_file["Comments"][0]["Text"] == "untracked-e2e"
+            assert saved["Split"] is True  # New files keep the global SBS preference.
+            send("1\x1b[27u")  # Clear the path filter.
+            send("/sample.go\r")
+            send("0\x1b[Hvj")
+            send("c")
+            send("range-e2e")
+            send("\x1bOQ")
+            saved = wait_state(lambda saved: any(
+                c["Text"] == "range-e2e" for f in saved["Files"] for c in f["Comments"]))
+            sample = next(f for f in saved["Files"] if f["Path"] == "sample.go")
+            ranged = next(c for c in sample["Comments"] if c["Text"] == "range-e2e")
+            assert not ranged.get("File", False)
+            assert ranged["End"] > ranged["Start"]
+            # Resize and issue real SGR mouse-wheel events before continuing.
+            for width, height in ((60, 15), (120, 30)):
+                start = len(output)
+                fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack("HHHH", height, width, 0, 0))
+                os.kill(process.pid, signal.SIGWINCH)
+                wait_for(lambda: f"\x1b[{height};1H".encode() in output[start:], "resize redraw")
+            send("\x1b[<65;90;15M\x1b[<64;90;15M")
+            send("2/range-e2e\rx")
+            wait_state(lambda saved: any(c.get("Done") and c["Text"] == "range-e2e"
+                       for f in saved["Files"] for c in f["Comments"]))
+            send("1ou")  # Commented-files filter and shared Open/All filter.
+            assert process.poll() is None
+            send("ou")
+            send("3\x1b[Hj\r")  # Select the initial commit.
+            wait_state(lambda saved: saved.get("Base"))
+            send("\x1b[H\r")  # Back to the working tree.
+            wait_state(lambda saved: not saved.get("Base"))
+            send("R\x1b[C\r")  # Archive, not reset.
+            saved = wait_state(lambda saved: saved.get("History")
+                               and not any(f["Comments"] for f in saved["Files"]))
+            assert saved["History"]
+            assert not any(f["Comments"] for f in saved["Files"])
 
         state = root / ".git/annodiff.json"
         try:
             wait_for(lambda: b"Ready" in output)
             send("e")
             wait_for(lambda: b"fake-editor-finished" in output)
-            wait_for(lambda: state.exists())
+            wait_for(lambda: state.exists() and output.count(b"\x1b[>1u") == 2,
+                     "editor returned to TUI")
             body = "[red] literal"
             if type(size) is int:
                 # Measure the entire generated review, including paths and instructions.
@@ -150,7 +222,10 @@ print("fake-editor-finished", flush=True)
             send("\r")  # Explicit delivery confirmation.
             wait_for(payload.exists)
             wait_for(lambda: b"fake-codex-finished" in output)
-            pump(0.3)
+            result_start = output.index(b"fake-codex-finished")
+            wait_for(lambda: any(word in output[result_start:] for word in
+                                 ((b"saved", b"retained") if failure else (b"closed.",))),
+                     "delivery result")
             assert payload.read_text().startswith("Respond in Japanese.\n")
             assert "日本語 comment\n" + body in payload.read_text()
             if type(size) is int:
@@ -161,6 +236,8 @@ print("fake-editor-finished", flush=True)
             assert bool(comment.get("Sent")) == (failure == 0)
             retained = list((root / ".git").glob("annodiff-review-*.md"))
             assert len(retained) == (1 if failure and uses_file else 0)
+            if case == 0:
+                check_navigation()
             send("q")
             process.wait(timeout=5)
             assert process.returncode == 0
@@ -171,10 +248,25 @@ print("fake-editor-finished", flush=True)
             # The persistent lock file must not prevent a later writer.
             subprocess.run([str(binary), "--rewrite-state", str(state), str(state)],
                            env=env, check=True, capture_output=True, timeout=5)
+            if case == 0:
+                before = state.read_bytes()
+                output.clear()
+                process = subprocess.Popen([str(binary), str(root)], stdin=slave, stdout=slave,
+                                           stderr=slave, env=env, start_new_session=True, preexec_fn=attach_terminal)
+                wait_for(lambda: b"Ready" in output)
+                assert state.read_bytes() == before, "restart changed saved review history"
+                send("q")
+                process.wait(timeout=5)
+                assert process.returncode == 0
+                assert termios.tcgetattr(slave) == original
+        except Exception:
+            print(f"FAIL: case {case} ({failure=}, {size=})", file=sys.stderr)
+            print(output.decode("utf-8", errors="replace")[-6000:], file=sys.stderr)
+            raise
         finally:
             if process.poll() is None:
                 process.kill()
                 process.wait()
             os.close(master)
             os.close(slave)
-print("PASS: PTY editing, Japanese input, preview-before-send, terminal restore, failed-delivery recovery")
+print("PASS: PTY navigation, help, filters, modes, comments, resize/mouse, commits/archive, delivery and terminal restore")
