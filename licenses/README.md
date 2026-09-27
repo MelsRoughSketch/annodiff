@@ -1,6 +1,6 @@
 # Maintaining license notices
 
-Distribute `LICENSE` and `THIRD_PARTY_NOTICES.md` with release binaries. The binary
+Distribute `LICENSE-MIT`, `LICENSE-APACHE`, and `THIRD_PARTY_NOTICES.md` with release binaries. The binary
 also embeds both files: `annodiff --licenses` works after `cargo install`, without
 a source checkout or network access.
 

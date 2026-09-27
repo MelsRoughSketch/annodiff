@@ -28,7 +28,10 @@ fixture = repo / "tests/fixtures/review.json"
 assert run(binary, "--version").startswith(b"annodiff ")
 assert b"Usage: annodiff " in run(binary, "--help")
 assert run(binary, "--licenses", cwd="/tmp") == (
-    (repo / "LICENSE").read_bytes() + b"\n" + (repo / "THIRD_PARTY_NOTICES.md").read_bytes()
+    b"annodiff is licensed under MIT OR Apache-2.0, at your option.\n\n"
+    + (repo / "LICENSE-MIT").read_bytes() + b"\n"
+    + (repo / "LICENSE-APACHE").read_bytes() + b"\n"
+    + (repo / "THIRD_PARTY_NOTICES.md").read_bytes()
 )
 run(binary, "--check-state", fixture)
 assert run(binary, "--prompt", fixture) == fixture.with_name("review-prompt.md").read_bytes()
