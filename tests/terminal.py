@@ -54,12 +54,12 @@ print("fake-editor-finished", flush=True)
     config.mkdir(parents=True)
     (config / "config.toml").write_text('response_language = "jp"\n')
 
-    for failure in (0, 7):
-        root = directory / f"repo{failure}"
+    for case, (failure, save_key) in enumerate(((0, "\x1b[13;5u"), (0, "\n"), (7, "\x1bOQ"))):
+        root = directory / f"repo{case}"
         root.mkdir()
         subprocess.run(["git", "init", "-q", str(root)], check=True)
         (root / "sample.go").write_text('package main\nfunc main() {}\n')
-        payload = directory / f"payload{failure}.md"
+        payload = directory / f"payload{case}.md"
         env = dict(os.environ, TERM="xterm-256color", PATH=str(tools) + os.pathsep + os.environ["PATH"],
                    VISUAL=str(editor), CODEX_HOME=str(directory / "codex-home"),
                    XDG_CONFIG_HOME=str(config.parent), FAKE_PAYLOAD=str(payload), FAKE_FAIL=str(failure),
@@ -107,7 +107,7 @@ print("fake-editor-finished", flush=True)
             send("1c")  # Inline file comment; input letters remain literal.
             send("日本語 comment\r")
             send("\x1b[200~[red] literal\x1b[201~")
-            send("\x1b[13;5u" if failure == 0 else "\x1bOQ")
+            send(save_key)
             wait_for(lambda: json.loads(state.read_text())["Files"][0]["Comments"])
             saved = json.loads(state.read_text())
             assert saved["Files"][0]["Comments"][0]["Text"] == "日本語 comment\n[red] literal", repr(saved["Files"][0]["Comments"][0]["Text"])
@@ -119,7 +119,7 @@ print("fake-editor-finished", flush=True)
                 assert other.returncode != 0
                 assert b"cannot lock" in other.stderr, other.stderr
                 assert state.read_bytes() == before
-            send("\x1b[13;5u" if failure == 0 else "\x1bOQ")  # Destination selection, not delivery.
+            send(save_key)  # Destination selection, not delivery.
             wait_for(lambda: b"Destination" in output)
             assert not payload.exists()
             send("\r")  # Preview.

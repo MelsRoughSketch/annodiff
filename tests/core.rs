@@ -1727,11 +1727,14 @@ fn wrapped_comment_tail_is_visible_in_inspection_and_send_preview() {
 fn save_binding_distinguishes_control_enter_from_plain_enter() {
     use annodiff::app::save_key;
     assert!(save_key(KeyEvent::new(K::Enter, M::CONTROL)));
+    assert!(save_key(KeyEvent::new(K::Char('j'), M::CONTROL)));
     assert!(save_key(KeyEvent::new(K::F(2), M::NONE)));
     for key in [
         KeyEvent::new(K::Enter, M::NONE),
         KeyEvent::new(K::Enter, M::SHIFT),
         KeyEvent::new(K::Enter, M::CONTROL | M::ALT),
+        KeyEvent::new(K::Char('j'), M::NONE),
+        KeyEvent::new(K::Char('j'), M::CONTROL | M::ALT),
         KeyEvent::new(K::Char('s'), M::CONTROL),
     ] {
         assert!(!save_key(key));

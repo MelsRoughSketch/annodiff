@@ -1781,7 +1781,9 @@ impl App {
     }
 }
 pub fn save_key(key: KeyEvent) -> bool {
-    key.code == K::F(2) || key.code == K::Enter && key.modifiers == M::CONTROL
+    // Some terminals send Ctrl+Enter as LF, decoded as Ctrl+J in raw mode.
+    key.code == K::F(2)
+        || matches!(key.code, K::Enter | K::Char('j')) && key.modifiers == M::CONTROL
 }
 fn scroll_key(scroll: &mut usize, key: KeyEvent, page: usize) {
     match key.code {
