@@ -229,8 +229,9 @@ fn main_result() -> Result<()> {
     match args.first().map(String::as_str) {
         Some("--licenses") => {
             print!(
-                "{}\n{}",
-                include_str!("../LICENSE"),
+                "annodiff is licensed under MIT OR Apache-2.0, at your option.\n\n{}\n{}\n{}",
+                include_str!("../LICENSE-MIT"),
+                include_str!("../LICENSE-APACHE"),
                 include_str!("../THIRD_PARTY_NOTICES.md")
             );
             Ok(())

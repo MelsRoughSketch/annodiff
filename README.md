@@ -35,6 +35,7 @@ Browse files and commits, select lines, and add comments. Preview reviews before
 
 ## License
 
-[MIT](LICENSE) · [Third-party notices](THIRD_PARTY_NOTICES.md)
+Licensed under either [MIT](LICENSE-MIT) or [Apache-2.0](LICENSE-APACHE), at your option.
+Dependencies retain their own licenses; see [third-party notices](THIRD_PARTY_NOTICES.md).
 
 Run `annodiff --licenses` to display the included license texts and attributions.
