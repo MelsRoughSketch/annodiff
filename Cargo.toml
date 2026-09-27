@@ -8,6 +8,8 @@ repository = "https://github.com/MelsRoughSketch/annodiff"
 readme = "README.md"
 exclude = ["/.github/**", "/.gitignore", "/benchmarks/**", "/licenses/**"]
 description = "A terminal UI for annotating Git diffs and sending reviews to coding agents"
+keywords = ["git", "diff", "review", "tui", "cli"]
+categories = ["command-line-utilities", "development-tools"]
 
 [dependencies]
 anyhow = "1"
