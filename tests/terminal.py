@@ -36,8 +36,9 @@ if sys.argv[1:] == ["app-server"]:
 else:
     prompt = sys.argv[-1]
     match = re.search(r'Read the review in (".*?") and address', prompt)
-    path = pathlib.Path(json.loads(match[1]))
-    pathlib.Path(os.environ["FAKE_PAYLOAD"]).write_text(path.read_text())
+    payload = pathlib.Path(os.environ["FAKE_PAYLOAD"])
+    payload.write_text(pathlib.Path(json.loads(match[1])).read_text() if match else prompt)
+    payload.with_suffix(".mode").write_text("file" if match else "direct")
     print("fake-codex-finished", flush=True)
     sys.exit(int(os.environ["FAKE_FAIL"]))
 ''', encoding="utf-8")
@@ -54,7 +55,12 @@ print("fake-editor-finished", flush=True)
     config.mkdir(parents=True)
     (config / "config.toml").write_text('response_language = "jp"\n')
 
-    for case, (failure, save_key) in enumerate(((0, "\x1b[13;5u"), (0, "\n"), (7, "\x1bOQ"))):
+    cases = [(failure, save_key, large)
+             for failure, save_key in ((0, "\x1b[13;5u"), (0, "\n"), (7, "\x1bOQ"))
+             for large in (False, True)]
+    cases += [(0, "\x1bOQ", size) for size in (8191, 8192, 8193)]
+    cases += [(failure, "\x1bOQ", "nul") for failure in (0, 7)]
+    for case, (failure, save_key, size) in enumerate(cases):
         root = directory / f"repo{case}"
         root.mkdir()
         subprocess.run(["git", "init", "-q", str(root)], check=True)
@@ -104,13 +110,29 @@ print("fake-editor-finished", flush=True)
             send("e")
             wait_for(lambda: b"fake-editor-finished" in output)
             wait_for(lambda: state.exists())
+            body = "[red] literal"
+            if type(size) is int:
+                # Measure the entire generated review, including paths and instructions.
+                sample = json.loads(state.read_text())
+                sample["Files"][0]["Comments"] = [{"File": True, "Text": "日本語 comment\n" + body}]
+                sample_path = directory / "boundary-review.json"
+                sample_path.write_text(json.dumps(sample))
+                exported = subprocess.check_output([str(binary), "--prompt", str(sample_path)], env=env)
+                remaining = size - len(b"Respond in Japanese.\n\n" + exported)
+                assert remaining > 0
+                body += "界" * (remaining // 3) + "x" * (remaining % 3)
+            elif size == "nul":
+                body += "\0after NUL"
+            elif size:
+                body += " large review" * 800
+            uses_file = size is True or size == "nul" or type(size) is int and size > 8192
             send("1c")  # Inline file comment; input letters remain literal.
             send("日本語 comment\r")
-            send("\x1b[200~[red] literal\x1b[201~")
+            send("\x1b[200~" + body + "\x1b[201~")
             send(save_key)
             wait_for(lambda: json.loads(state.read_text())["Files"][0]["Comments"])
             saved = json.loads(state.read_text())
-            assert saved["Files"][0]["Comments"][0]["Text"] == "日本語 comment\n[red] literal", repr(saved["Files"][0]["Comments"][0]["Text"])
+            assert saved["Files"][0]["Comments"][0]["Text"] == "日本語 comment\n" + body, repr(saved["Files"][0]["Comments"][0]["Text"])
             # A second writer must fail before it can load stale state or enter the TUI.
             before = state.read_bytes()
             for args in ([root], ["--rewrite-state", state, state]):
@@ -130,12 +152,15 @@ print("fake-editor-finished", flush=True)
             wait_for(lambda: b"fake-codex-finished" in output)
             pump(0.3)
             assert payload.read_text().startswith("Respond in Japanese.\n")
-            assert "日本語 comment\n[red] literal" in payload.read_text()
+            assert "日本語 comment\n" + body in payload.read_text()
+            if type(size) is int:
+                assert len(payload.read_bytes()) == size, (size, len(payload.read_bytes()))
+            assert payload.with_suffix(".mode").read_text() == ("file" if uses_file else "direct")
             saved = json.loads(state.read_text())
             comment = saved["Files"][0]["Comments"][0]
             assert bool(comment.get("Sent")) == (failure == 0)
             retained = list((root / ".git").glob("annodiff-review-*.md"))
-            assert len(retained) == (1 if failure else 0)
+            assert len(retained) == (1 if failure and uses_file else 0)
             send("q")
             process.wait(timeout=5)
             assert process.returncode == 0

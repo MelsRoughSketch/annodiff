@@ -15,6 +15,8 @@ Omit the path to review the current directory.
 
 Sending reviews requires an authenticated `codex` CLI. Browsing and saving comments work without it.
 
+Reviews are sent directly as messages; large reviews use a temporary Markdown file.
+
 ## Build from source
 
 ```sh
