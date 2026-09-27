@@ -75,15 +75,33 @@ fn suspend(terminal: &mut ratatui::DefaultTerminal, command: &mut Command) -> Re
 fn send(app: &mut App, terminal: &mut ratatui::DefaultTerminal, id: &str) -> Result<()> {
     app.fresh()?;
     let queued = !id.is_empty() && agent::session_loaded(id)?;
-    let mut file = tempfile::Builder::new()
-        .prefix("annodiff-review-")
-        .suffix(".md")
-        .tempfile_in(app.state.parent().context("missing state directory")?)?;
-    file.write_all(app.prompt().as_bytes())?;
-    file.flush()?;
-    let (file, path) = file.keep()?;
-    drop(file);
-    let mut command = agent::command(&app.review.root, id, &path, queued);
+    let mut prompt = app.prompt();
+    // Leave room for CLI arguments/quoting on Windows and Unix. NUL cannot be an argument.
+    let path = if prompt.len() > 8 * 1024 || prompt.contains('\0') {
+        let mut file = tempfile::Builder::new()
+            .prefix("annodiff-review-")
+            .suffix(".md")
+            .tempfile_in(app.state.parent().context("missing state directory")?)?;
+        file.write_all(prompt.as_bytes())?;
+        file.flush()?;
+        let (file, path) = file.keep()?;
+        drop(file);
+        prompt = format!(
+            "Read the review in {:?} and address all user comments in repository {:?}. It contains file-wide comments and annotated excerpts. Read repository files and git diff for additional context as needed.",
+            path.to_string_lossy(),
+            app.review.root
+        );
+        Some(path)
+    } else {
+        None
+    };
+    let retained = || {
+        path.as_ref().map_or_else(
+            || "comments remain in the saved review".to_owned(),
+            |path| format!("review retained at {}", path.display()),
+        )
+    };
+    let mut command = agent::command(&app.review.root, id, &prompt, queued);
     let deliver = if queued {
         command.output().context("queue review").and_then(|out| {
             ensure!(
@@ -96,7 +114,7 @@ fn send(app: &mut App, terminal: &mut ratatui::DefaultTerminal, id: &str) -> Res
     } else {
         suspend(terminal, &mut command)
     };
-    deliver.with_context(|| format!("review retained at {}", path.display()))?;
+    deliver.with_context(retained)?;
     let mut next = app.review.clone();
     for comment in next
         .files
@@ -105,23 +123,26 @@ fn send(app: &mut App, terminal: &mut ratatui::DefaultTerminal, id: &str) -> Res
         .filter(|c| c.pending())
     {
         comment.sent = true;
-        if queued {
+        if queued && let Some(path) = &path {
             comment.delivery = path.file_name().unwrap().to_string_lossy().into_owned();
         }
     }
-    app.apply(next).with_context(|| {
-        format!(
-            "sent, but status could not be saved; review retained at {}",
-            path.display()
-        )
-    })?;
+    app.apply(next)
+        .with_context(|| format!("sent, but status could not be saved; {}", retained()))?;
     if queued {
-        app.status = format!(
-            "Queued; review retained until all comments are done: {}",
-            path.display()
+        app.status = path.as_ref().map_or_else(
+            || "Queued. Comments are Sent and Open.".into(),
+            |path| {
+                format!(
+                    "Queued; review retained until all comments are done: {}",
+                    path.display()
+                )
+            },
         );
     } else {
-        review::remove_if_exists(&path)?;
+        if let Some(path) = &path {
+            review::remove_if_exists(path)?;
+        }
         app.status =
             "Codex closed. Comments are Sent and Open; r refreshes, 2 opens history.".into();
     }

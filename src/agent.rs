@@ -259,19 +259,14 @@ pub fn session_loaded_at(path: &Path, id: &str) -> Result<bool> {
         }
     }
 }
-pub fn command(root: &str, id: &str, path: &Path, queued: bool) -> Command {
-    let prompt = format!(
-        "Read the review in {:?} and address all user comments in repository {:?}. It contains file-wide comments and annotated excerpts. Read repository files and git diff for additional context as needed.",
-        path.to_string_lossy(),
-        root
-    );
+pub fn command(root: &str, id: &str, prompt: &str, queued: bool) -> Command {
     let mut command = Command::new("codex");
     if id.is_empty() {
-        command.args(["-C", root, "--", &prompt]);
+        command.args(["-C", root, "--", prompt]);
     } else if queued {
-        command.args(["queue", "--thread", id, "--message", &prompt]);
+        command.args(["queue", "--thread", id, "--message", prompt]);
     } else {
-        command.args(["resume", "-C", root, id, &prompt]);
+        command.args(["resume", "-C", root, id, prompt]);
     }
     command.current_dir(root);
     command

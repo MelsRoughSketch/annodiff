@@ -1,6 +1,5 @@
 use annodiff::agent;
 use serde_json::json;
-use std::path::Path;
 
 #[test]
 fn protocol_routes_notifications_and_errors() {
@@ -28,11 +27,11 @@ fn protocol_routes_notifications_and_errors() {
         ("thread", false, "resume"),
         ("thread", true, "queue"),
     ] {
-        let cmd = agent::command("/repo with space", id, Path::new("/tmp/review.md"), queued);
+        let body = "Review /repo with space\n日本語 comment: `code` $(literal)";
+        let cmd = agent::command("/repo with space", id, body, queued);
         assert_eq!(cmd.get_args().next().unwrap(), want);
         let prompt = cmd.get_args().last().unwrap().to_string_lossy();
-        assert!(prompt.contains("/repo with space"));
-        assert!(prompt.contains("/tmp/review.md"));
+        assert_eq!(prompt, body);
     }
 }
 
