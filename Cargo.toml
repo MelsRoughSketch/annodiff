@@ -6,7 +6,7 @@ rust-version = "1.88"
 license = "MIT"
 repository = "https://github.com/MelsRoughSketch/annodiff"
 readme = "README.md"
-exclude = ["benchmarks/results/**"]
+exclude = ["/.github/**", "/.gitignore", "/benchmarks/**", "/licenses/**"]
 description = "A terminal UI for annotating Git diffs and sending reviews to coding agents"
 
 [dependencies]
