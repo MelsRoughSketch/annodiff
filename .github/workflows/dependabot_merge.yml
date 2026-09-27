@@ -21,7 +21,7 @@ jobs:
       # Never check out or execute PR code with this privileged token.
       - name: Dependabot metadata
         id: metadata
-        uses: dependabot/fetch-metadata@v2
+        uses: dependabot/fetch-metadata@v3
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
       # Required CI checks must be configured on main before enabling auto-merge.
