@@ -1039,20 +1039,19 @@ fn draw_modal(
                 content.width - left.width,
                 content.height,
             );
-            let refs: Vec<_> = review
-                .files
-                .iter()
-                .flat_map(|f| {
-                    f.comments
-                        .iter()
-                        .filter(|c| c.pending())
-                        .map(move |c| (f, c))
-                })
-                .collect();
+            let refs: Vec<_> = review.pending_comments().collect();
             let labels: Vec<_> = refs
                 .iter()
                 .enumerate()
-                .map(|(i, (f, c))| format!("{}. {} · {}", i + 1, f.path, c.location(&f.lines)))
+                .map(|(i, (history, f, c))| {
+                    format!(
+                        "{}. {}{} · {}",
+                        i + 1,
+                        if *history { "[history] " } else { "" },
+                        f.path,
+                        c.location(&f.lines)
+                    )
+                })
                 .collect();
             let inner = bordered(frame, left, " Comments to send ".into(), *pane == 0);
             list(
@@ -1064,7 +1063,7 @@ fn draw_modal(
                 *pane == 0,
                 false,
             );
-            if let Some((file, comment)) = refs.get(*selection) {
+            if let Some((history, file, comment)) = refs.get(*selection) {
                 let body = Rect::new(right.x, right.y, right.width, right.height / 3);
                 let code = Rect::new(
                     right.x,
@@ -1072,14 +1071,25 @@ fn draw_modal(
                     right.width,
                     right.height - body.height,
                 );
-                let inner = bordered(frame, body, " Comment ".into(), *pane == 1);
+                let inner = bordered(
+                    frame,
+                    body,
+                    if *history {
+                        " Historical comment "
+                    } else {
+                        " Comment "
+                    }
+                    .into(),
+                    *pane == 1,
+                );
                 text(
                     frame,
                     inner,
                     &format!(
-                        "{}\nLines: {}\n\n{}",
+                        "{}\nLines: {}{}\n\n{}",
                         file.path,
                         comment.location(&file.lines),
+                        if *history { " (historical)" } else { "" },
                         comment.text
                     ),
                     offsets[0],

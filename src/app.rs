@@ -1175,20 +1175,20 @@ impl App {
         }
     }
     pub fn pending_refs(&self) -> Vec<CommentRef> {
-        self.review
-            .files
-            .iter()
-            .enumerate()
-            .flat_map(|(file, f)| {
-                f.comments
-                    .iter()
-                    .enumerate()
-                    .filter(|(_, c)| c.pending())
-                    .map(move |(comment, _)| CommentRef {
-                        file,
-                        comment,
-                        history: false,
-                    })
+        [(false, &self.review.files), (true, &self.review.history)]
+            .into_iter()
+            .flat_map(|(history, files)| {
+                files.iter().enumerate().flat_map(move |(file, f)| {
+                    f.comments
+                        .iter()
+                        .enumerate()
+                        .filter(move |(_, c)| c.sendable(history))
+                        .map(move |(comment, _)| CommentRef {
+                            file,
+                            comment,
+                            history,
+                        })
+                })
             })
             .collect()
     }

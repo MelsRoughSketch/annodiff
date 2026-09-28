@@ -116,17 +116,15 @@ fn send(app: &mut App, terminal: &mut ratatui::DefaultTerminal, id: &str) -> Res
     };
     deliver.with_context(retained)?;
     let mut next = app.review.clone();
-    for comment in next
-        .files
-        .iter_mut()
-        .flat_map(|f| &mut f.comments)
-        .filter(|c| c.pending())
-    {
-        comment.sent = true;
-        if queued && let Some(path) = &path {
-            comment.delivery = path.file_name().unwrap().to_string_lossy().into_owned();
-        }
-    }
+    let delivery = if queued {
+        path.as_ref()
+            .and_then(|p| p.file_name())
+            .map(|name| name.to_string_lossy().into_owned())
+            .unwrap_or_default()
+    } else {
+        String::new()
+    };
+    next.mark_sent(&delivery);
     app.apply(next)
         .with_context(|| format!("sent, but status could not be saved; {}", retained()))?;
     if queued {

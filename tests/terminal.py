@@ -246,6 +246,37 @@ print("fake-editor-finished", flush=True)
             assert bool(comment.get("Sent")) == (failure == 0)
             retained = list((root / ".git").glob("annodiff-review-*.md"))
             assert len(retained) == (1 if failure and uses_file else 0)
+            # A new unsent comment remains deliverable after its file changes and reloads.
+            send("1c")
+            send("follow-up-e2e")
+            send(save_key)
+            saved = wait_state(lambda saved: any(c["Text"] == "follow-up-e2e"
+                               for f in saved["Files"] for c in f["Comments"]))
+            changed = next(f for f in saved["Files"]
+                           if any(c["Text"] == "follow-up-e2e" for c in f["Comments"]))
+            changed_path = root / changed["Path"]
+            changed_path.write_text(changed_path.read_text() + "// changed before reload\n")
+            send("r")
+            wait_state(lambda saved: any(c["Text"] == "follow-up-e2e" and c.get("SendFromHistory")
+                       for f in saved.get("History", []) for c in f["Comments"]))
+            payload.unlink()
+            start = len(output)
+            send(save_key)
+            wait_for(lambda: b"Destination" in output[start:], "history send destination")
+            send("\r")
+            wait_for(lambda: b"[history]" in output[start:], "history send preview")
+            send("\r")
+            wait_for(payload.exists)
+            wait_for(lambda: b"fake-codex-finished" in output[start:], "history delivery")
+            wait_for(lambda: any(word in output[start:] for word in
+                                 ((b"saved", b"retained") if failure else (b"closed.",))),
+                     "history delivery result")
+            assert "Historical snapshot:" in payload.read_text()
+            assert "follow-up-e2e" in payload.read_text()
+            saved = json.loads(state.read_text())
+            follow_up = next(c for f in saved["History"] for c in f["Comments"]
+                             if c["Text"] == "follow-up-e2e")
+            assert bool(follow_up.get("Sent")) == (failure == 0)
             if case == 0:
                 check_navigation()
             send("q")

@@ -40,6 +40,8 @@ pub struct Comment {
     pub done: bool,
     #[serde(skip_serializing_if = "String::is_empty")]
     pub delivery: String,
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub send_from_history: bool,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -78,6 +80,9 @@ pub struct Review {
 impl Comment {
     pub fn pending(&self) -> bool {
         !self.sent && !self.done
+    }
+    pub fn sendable(&self, history: bool) -> bool {
+        self.pending() && (!history || self.send_from_history)
     }
     pub fn includes(&self, index: usize, line: &Line) -> bool {
         !self.file
@@ -204,12 +209,32 @@ impl Review {
         file.persist(path).map_err(|e| e.error)?;
         Ok(())
     }
+    pub fn pending_comments(&self) -> impl Iterator<Item = (bool, &File, &Comment)> {
+        [(false, &self.files), (true, &self.history)]
+            .into_iter()
+            .flat_map(|(history, files)| {
+                files.iter().flat_map(move |file| {
+                    file.comments
+                        .iter()
+                        .filter(move |c| c.sendable(history))
+                        .map(move |c| (history, file, c))
+                })
+            })
+    }
     pub fn pending(&self) -> usize {
-        self.files
-            .iter()
-            .flat_map(|f| &f.comments)
-            .filter(|c| c.pending())
-            .count()
+        self.pending_comments().count()
+    }
+    pub fn mark_sent(&mut self, delivery: &str) {
+        for (history, files) in [(false, &mut self.files), (true, &mut self.history)] {
+            for c in files
+                .iter_mut()
+                .flat_map(|f| &mut f.comments)
+                .filter(|c| c.sendable(history))
+            {
+                c.sent = true;
+                c.delivery = delivery.into();
+            }
+        }
     }
     pub fn count(&self) -> usize {
         self.files
@@ -243,6 +268,11 @@ impl Review {
     pub fn refresh(&self, mut next: Self, archive_all: bool) -> Self {
         next.split = self.split;
         next.history = self.history.clone();
+        if archive_all {
+            for c in next.history.iter_mut().flat_map(|f| &mut f.comments) {
+                c.send_from_history = false;
+            }
+        }
         for file in self.files.iter().filter(|f| !f.comments.is_empty()) {
             if let Some(current) = next
                 .files
@@ -253,6 +283,9 @@ impl Review {
             } else {
                 let mut archived = file.clone();
                 archived.patch.clear();
+                for c in &mut archived.comments {
+                    c.send_from_history = !archive_all && c.pending();
+                }
                 next.history.push(archived);
             }
         }
@@ -297,9 +330,14 @@ impl Review {
             );
         }
         let mut number = 0;
-        for file in &self.files {
+        for (history, file) in self
+            .files
+            .iter()
+            .map(|f| (false, f))
+            .chain(self.history.iter().map(|f| (true, f)))
+        {
             let mut heading = false;
-            for c in file.comments.iter().filter(|c| c.pending()) {
+            for c in file.comments.iter().filter(|c| c.sendable(history)) {
                 if !heading {
                     let _ = writeln!(
                         out,
@@ -309,6 +347,9 @@ impl Review {
                         )
                         .unwrap()
                     );
+                    if history {
+                        out.push_str("Historical snapshot: the following comments and line numbers refer to an earlier diff, not the current files or compared revisions. Check the current code before applying them.\n\n");
+                    }
                     heading = true;
                 }
                 number += 1;

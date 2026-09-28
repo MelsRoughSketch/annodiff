@@ -2499,3 +2499,201 @@ fn selection_survives_reflow_before_comment_editing() {
         }
     }
 }
+
+#[test]
+fn unsent_comments_remain_sendable_after_reload() {
+    for scenario in [
+        "sent_only",
+        "edit_sent_comment",
+        "new_unsent_comment",
+        "unrelated_file_change",
+        "no_remaining_diff",
+        "deleted_file",
+    ] {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        git(root, &["init", "-q"]);
+        fs::write(root.join("a.txt"), "base\n").unwrap();
+        git(root, &["add", "."]);
+        git(
+            root,
+            &[
+                "-c",
+                "user.name=Test",
+                "-c",
+                "user.email=test@example.com",
+                "-c",
+                "commit.gpgsign=false",
+                "commit",
+                "-qm",
+                "base",
+            ],
+        );
+        fs::write(root.join("a.txt"), "first change\n").unwrap();
+        let mut review = review::snapshot(root.to_str().unwrap(), "", "").unwrap();
+        // Model the state written after successful delivery; do not send to a real agent.
+        review.files[0].comments.push(Comment {
+            file: true,
+            sent: true,
+            text: "first review".into(),
+            ..Default::default()
+        });
+        let mut app = App::new(review, root.join(".git/review.json"));
+        app.select_file(Some(0));
+        if scenario == "edit_sent_comment" {
+            app.start_edit(
+                Some(annodiff::app::CommentRef {
+                    file: 0,
+                    comment: 0,
+                    history: false,
+                }),
+                true,
+            )
+            .unwrap();
+            app.editor.as_mut().unwrap().input.insert_str(" follow-up");
+            app.save_editor().unwrap();
+        } else if scenario != "sent_only" {
+            app.start_edit(None, true).unwrap();
+            app.editor
+                .as_mut()
+                .unwrap()
+                .input
+                .insert_str("follow-up review");
+            app.save_editor().unwrap();
+        }
+        let pending_before = app.review.pending();
+        if scenario == "unrelated_file_change" {
+            fs::write(root.join("b.txt"), "unrelated change\n").unwrap();
+        } else if scenario == "no_remaining_diff" {
+            fs::write(root.join("a.txt"), "base\n").unwrap();
+        } else if scenario == "deleted_file" {
+            fs::remove_file(root.join("a.txt")).unwrap();
+        } else {
+            fs::write(root.join("a.txt"), "second change\n").unwrap();
+        }
+        assert!(app.fresh().is_err());
+        app.refresh(false).unwrap();
+        app.fresh().unwrap();
+        assert_eq!(app.review.pending(), pending_before);
+        assert_eq!(app.pending_refs().len(), pending_before);
+        let saved = Review::load(&app.state).unwrap();
+        assert_eq!(saved.pending(), pending_before);
+        let historical = scenario != "unrelated_file_change";
+        assert_eq!(
+            saved.pending_comments().filter(|(h, _, _)| *h).count(),
+            if historical { pending_before } else { 0 }
+        );
+        if scenario == "sent_only" {
+            assert!(!app.prompt().contains("### Comment"));
+            assert_eq!(
+                app.start_sessions().unwrap_err().to_string(),
+                "no unsent Open comments to send"
+            );
+            continue;
+        }
+        assert!(app.prompt().contains("follow-up"));
+        assert_eq!(app.prompt().contains("Historical snapshot:"), historical);
+        // Repeated reload and manual Archive must not duplicate or revive comments.
+        app.refresh(false).unwrap();
+        assert_eq!(app.review.pending(), pending_before);
+        let archived = app.review.refresh(
+            review::snapshot(root.to_str().unwrap(), "", "").unwrap(),
+            true,
+        );
+        assert_eq!(archived.pending(), 0);
+        assert!(!archived.prompt().contains("### Comment"));
+        // A successful queued delivery updates history and preserves cleanup tracking.
+        let mut delivered = app.review.clone();
+        delivered.mark_sent("annodiff-review-regression.md");
+        assert_eq!(delivered.pending(), 0);
+        assert!(
+            delivered
+                .files
+                .iter()
+                .chain(&delivered.history)
+                .flat_map(|f| &f.comments)
+                .filter(|c| c.text.contains("follow-up"))
+                .all(|c| c.sent && c.delivery == "annodiff-review-regression.md")
+        );
+        app.apply(delivered).unwrap();
+        if app.review.files.is_empty() {
+            assert_eq!(app.review.pending(), 0);
+            app.fresh().unwrap();
+            continue;
+        }
+        app.select_file(Some(0));
+        app.start_edit(None, true).unwrap();
+        app.editor
+            .as_mut()
+            .unwrap()
+            .input
+            .insert_str("new comment after reload");
+        app.save_editor().unwrap();
+        assert_eq!(app.review.pending(), 1);
+        assert_eq!(app.pending_refs().len(), 1);
+        assert!(app.prompt().contains("new comment after reload"));
+        app.fresh().unwrap();
+    }
+}
+
+#[test]
+fn historical_comment_preview_preserves_archive_and_legacy_state() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut f = fixture();
+    f.comments.push(Comment {
+        start: 7,
+        end: 7,
+        text: "historical note".into(),
+        ..Default::default()
+    });
+    let current = Review {
+        files: vec![f],
+        ..Default::default()
+    };
+    let refreshed = current.refresh(Review::default(), false);
+    let mut app = App::new(refreshed, dir.path().join("state.json"));
+    app.review.save(&app.state).unwrap();
+    app.file_only = false;
+    app.open_only = false;
+    app.rebuild_comments();
+    app.focus(2);
+    assert_eq!(app.review.pending(), 1);
+    assert!(app.pending_refs()[0].history);
+    assert!(app.prompt().contains("Historical snapshot:"));
+    assert!(app.prompt().contains("* 0/2 +new()"));
+    assert_eq!(Review::load(&app.state).unwrap().pending(), 1);
+    // Clipboard preview uses the same history entry and leaves it unsent.
+    app.modal = Some(Modal::Preview {
+        destination: "Clipboard".into(),
+        id: String::new(),
+        copy: true,
+        selection: 0,
+        pane: 0,
+        offsets: [0; 2],
+    });
+    let mut terminal = Terminal::new(TestBackend::new(120, 40)).unwrap();
+    draw(&mut app, &mut terminal);
+    let screen: String = terminal
+        .backend()
+        .buffer()
+        .content
+        .iter()
+        .map(|c| c.symbol())
+        .collect();
+    assert!(screen.contains("[history]"));
+    assert!(screen.contains("Historical comment"));
+    press(&mut app, K::Esc);
+    press(&mut app, K::Char('x'));
+    assert_eq!(app.review.pending(), 0);
+    press(&mut app, K::Char('x'));
+    assert_eq!(app.review.pending(), 1);
+    let archived = app.review.refresh(Review::default(), true);
+    assert_eq!(archived.pending(), 0);
+    // Legacy history cannot distinguish reload from manual Archive; preserve its exclusion.
+    let encoded = serde_json::to_string(&archived).unwrap();
+    assert!(!encoded.contains("SendFromHistory"));
+    assert_eq!(
+        serde_json::from_str::<Review>(&encoded).unwrap().pending(),
+        0
+    );
+}
