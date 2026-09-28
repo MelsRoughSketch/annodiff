@@ -991,38 +991,38 @@ fn draw_modal(
                 area.height - search_area.height,
             );
             let filters = [
-                if options.all {
-                    "Filter: CWD / [All]"
-                } else {
-                    "Filter: [CWD] / All"
-                },
-                if options.archived {
-                    "Status: Active / [Archived]"
-                } else {
-                    "Status: [Active] / Archived"
-                },
-                if options.created {
-                    "Sort: Updated / [Created]"
-                } else {
-                    "Sort: [Updated] / Created"
-                },
+                ("Filter", ["CWD", "All"], options.all),
+                ("Status", ["Active", "Archived"], options.archived),
+                ("Sort", ["Updated", "Created"], options.created),
             ];
             let mut title = vec![Span::raw(" Destination · ")];
-            let mut filter_areas = [Rect::default(); 3];
+            let mut filter_areas = [[Rect::default(); 2]; 3];
             let mut x = list_area
                 .x
                 .saturating_add(1 + " Destination · ".width() as u16);
-            for (i, label) in filters.iter().enumerate() {
+            for (i, (name, values, second)) in filters.iter().enumerate() {
                 let focused = !search && *control == i;
-                let label = format!("{}{}", if focused { ">" } else { "" }, label);
-                let width = label.width() as u16;
-                filter_areas[i] = Rect::new(
-                    x,
-                    list_area.y,
-                    width.min(list_area.right().saturating_sub(1).saturating_sub(x)),
-                    1.min(list_area.height),
-                );
-                x = x.saturating_add(width + " · ".width() as u16);
+                let mut label = format!("{}{name}: ", if focused { ">" } else { "" });
+                for (side, value) in values.iter().enumerate() {
+                    if side > 0 {
+                        label.push_str(" / ");
+                    }
+                    let value = if *second == (side == 1) {
+                        format!("[{value}]")
+                    } else {
+                        (*value).into()
+                    };
+                    let start = x.saturating_add(label.width() as u16);
+                    filter_areas[i][side] = Rect::new(
+                        start,
+                        list_area.y,
+                        (value.width() as u16)
+                            .min(list_area.right().saturating_sub(1).saturating_sub(start)),
+                        1.min(list_area.height),
+                    );
+                    label.push_str(&value);
+                }
+                x = x.saturating_add(label.width() as u16 + " · ".width() as u16);
                 title.push(Span::styled(
                     label,
                     if focused {

@@ -299,7 +299,7 @@ print("fake-editor-finished", flush=True)
             assert len(listings) == (2 if case in (1, 2) else 1), listings
             if case == 0:
                 start = len(output)
-                send("\x1b[<0;20;4M\x1b[<0;20;4m")  # Click Filter -> All.
+                send("\x1b[<0;35;4M\x1b[<0;35;4m")  # Click Filter -> All.
                 wait_for(lambda: b"elsewhere" in output[start:], "All loads other directories")
                 start = len(output)
                 send("a")
@@ -396,12 +396,12 @@ print("fake-editor-finished", flush=True)
                 start = len(output)
                 send(save_key)
                 wait_for(lambda: b"2 sessions" in output[start:])
-                send("\x1b[<0;45;4M\x1b[<0;45;4m")  # Click Status -> Archived.
+                send("\x1b[<0;60;4M\x1b[<0;60;4m")  # Click Status -> Archived.
                 wait_for(lambda: b"ARCHIVED_FIXTURE" in output[start:])
                 requests = [json.loads(line) for line in Path(env["FAKE_RPC_LOG"]).read_text().splitlines()]
                 assert sum(r["method"] == "initialize" for r in requests) == expected_initializations, "reopening/filtering restarted app-server"
                 send("\t\x1b[C")  # Updated -> Created; keep archived selection.
-                send("\x1b[B\x1b[B\r")
+                send("\x1b[<0;10;7M\x1b[<0;10;7m")  # Click archived row -> preview.
                 wait_for(lambda: b"Comments to send" in output[start:])
                 assert not payload.with_suffix(".unarchive").exists()
                 payload.unlink()

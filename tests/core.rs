@@ -2977,30 +2977,10 @@ fn session_picker_scroll_margin_and_wheel_preserve_selection() {
     assert_eq!(viewport(&app).0, before.0);
     assert_eq!(app.offset, 0);
     assert_eq!(app.list_offsets, [0; 4]);
-    // Clicking a scrolled row selects that visible session without moving the viewport.
-    let offset = viewport(&app).1;
-    app.handle(Event::Mouse(MouseEvent {
-        kind: MouseEventKind::Down(crossterm::event::MouseButton::Left),
-        column: area.x,
-        row: area.y + 2,
-        modifiers: M::NONE,
-    }))
-    .unwrap();
-    draw(&mut app, &mut terminal);
-    assert_eq!(viewport(&app).0, offset + 2);
-    assert_eq!(viewport(&app).1, offset);
-    // Scroll away, then keyboard movement follows the selected session again.
-    for _ in 0..50 {
-        app.handle(wheel(MouseEventKind::ScrollUp, area.y)).unwrap();
-    }
-    let clicked = viewport(&app).0;
     press(&mut app, K::Down);
     draw(&mut app, &mut terminal);
-    assert_eq!(viewport(&app).0, clicked + 1);
-    assert_eq!(
-        viewport(&app).0 - viewport(&app).1,
-        area.height as usize - 4
-    );
+    assert_eq!(viewport(&app).0, before.0 + 1);
+    assert_eq!(viewport(&app).0 - viewport(&app).1, 3);
     assert!(!viewport(&app).2);
     press(&mut app, K::Char('/'));
     app.handle(Event::Paste("Session 49".into())).unwrap();
@@ -3014,7 +2994,7 @@ fn session_picker_scroll_margin_and_wheel_preserve_selection() {
     let Some(Modal::Sessions { filter_areas, .. }) = &app.modal else {
         panic!()
     };
-    let sort = filter_areas[2];
+    let sort = filter_areas[2][1];
     app.handle(Event::Mouse(MouseEvent {
         kind: MouseEventKind::Down(crossterm::event::MouseButton::Left),
         column: sort.x,
@@ -3026,6 +3006,31 @@ fn session_picker_scroll_margin_and_wheel_preserve_selection() {
         matches!(&app.modal, Some(Modal::Sessions { options, control: 2, search: false, input, .. })
         if options.created && input.lines() == ["Session 49"])
     );
+    // Clicking the selected value again must not toggle, reset selection, or reload.
+    draw(&mut app, &mut terminal);
+    for control in 0..3 {
+        let Some(Modal::Sessions {
+            filter_areas,
+            options,
+            ..
+        }) = &app.modal
+        else {
+            panic!()
+        };
+        let side = usize::from([options.all, options.archived, options.created][control]);
+        let rect = filter_areas[control][side];
+        app.handle(Event::Mouse(MouseEvent {
+            kind: MouseEventKind::Down(crossterm::event::MouseButton::Left),
+            column: rect.x,
+            row: rect.y,
+            modifiers: M::NONE,
+        }))
+        .unwrap();
+        assert!(
+            matches!(&app.modal, Some(Modal::Sessions { options, .. }) if !options.all && !options.archived && options.created)
+        );
+        draw(&mut app, &mut terminal);
+    }
     terminal
         .resize(ratatui::layout::Rect::new(0, 0, 120, 8))
         .unwrap();
@@ -3034,6 +3039,15 @@ fn session_picker_scroll_margin_and_wheel_preserve_selection() {
     draw(&mut app, &mut terminal);
     let (selection, offset, _, area) = viewport(&app);
     assert!(selection >= offset && selection < offset + area.height as usize);
-    press(&mut app, K::Enter);
+    // A single click on a scrolled row opens the correct preview, without sending.
+    let effect = app
+        .handle(Event::Mouse(MouseEvent {
+            kind: MouseEventKind::Down(crossterm::event::MouseButton::Left),
+            column: area.x,
+            row: area.y + (selection - offset) as u16,
+            modifiers: M::NONE,
+        }))
+        .unwrap();
+    assert!(matches!(effect, Effect::None));
     assert!(matches!(&app.modal, Some(Modal::Preview { id, .. }) if id == "49"));
 }

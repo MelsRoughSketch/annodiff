@@ -81,7 +81,7 @@ pub enum Modal {
         offset: usize,
         manual_scroll: bool,
         area: Rect,
-        filter_areas: [Rect; 3],
+        filter_areas: [[Rect; 2]; 3],
         items: Vec<agent::Session>,
         input: TextArea<'static>,
         selection: usize,
@@ -1280,7 +1280,7 @@ impl App {
                 offset: 0,
                 manual_scroll: false,
                 area: Rect::default(),
-                filter_areas: [Rect::default(); 3],
+                filter_areas: [[Rect::default(); 2]; 3],
                 items,
                 input,
                 selection: 0,
@@ -1371,11 +1371,17 @@ impl App {
                 if mouse.kind == MouseEventKind::Down(MouseButton::Left)
                     && let Some(index) = filter_areas
                         .iter()
+                        .flatten()
                         .position(|r| r.contains((mouse.column, mouse.row).into()))
                 {
-                    *control = index;
+                    *control = index / 2;
                     *search = false;
-                    return self.handle_modal(KeyEvent::new(K::Right, M::NONE));
+                    let current = [options.all, options.archived, options.created][*control];
+                    return if current == (index % 2 == 1) {
+                        Ok(Effect::None)
+                    } else {
+                        self.handle_modal(KeyEvent::new(K::Right, M::NONE))
+                    };
                 }
                 if area.contains((mouse.column, mouse.row).into()) {
                     let query = input.lines().join(" ").to_lowercase();
@@ -1400,7 +1406,7 @@ impl App {
                             if index < len {
                                 *selection = index;
                                 *search = false;
-                                *manual_scroll = true;
+                                return self.handle_modal(KeyEvent::new(K::Enter, M::NONE));
                             }
                         }
                         _ => {}
