@@ -872,6 +872,15 @@ impl App {
                 break;
             }
         }
+        if delta > 0
+            && absolute.is_none()
+            && self.anchor.is_none()
+            && self.split()
+            && (self.cursor[0] + 1..view.len()).any(|row| view.selectable(row, 1 - self.side))
+        {
+            self.side = 1 - self.side;
+            self.move_selection(delta, None);
+        }
     }
     pub fn apply(&mut self, next: Review) -> Result<()> {
         let source = self
