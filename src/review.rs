@@ -527,6 +527,29 @@ fn diff_file(path: &str, bytes: Vec<u8>) -> File {
     }
 }
 
+pub fn has_trailing_context(root: &str, file: &File) -> Result<bool> {
+    let last = file.lines.iter().map(|line| line.old).max().unwrap_or(0);
+    if last == 0 {
+        return Ok(false);
+    }
+    let Some(id) = file.patch.lines().find_map(|line| {
+        line.strip_prefix("index ")?
+            .split_once("..")
+            .map(|(old, _)| old)
+    }) else {
+        return Ok(false);
+    };
+    ensure!(
+        !id.is_empty() && id.bytes().all(|b| b.is_ascii_hexdigit()),
+        "invalid blob ID"
+    );
+    // Inspect only the selected file's original blob, without generating a full-context diff.
+    let bytes = git(root, &["cat-file", "blob", id])?;
+    let lines = bytes.iter().filter(|&&b| b == b'\n').count()
+        + usize::from(!bytes.is_empty() && !bytes.ends_with(b"\n"));
+    Ok(lines > last)
+}
+
 pub fn expand_file(review: &Review, file: &File) -> Result<File> {
     ensure!(local_path(&file.path), "invalid file path");
     ensure!(

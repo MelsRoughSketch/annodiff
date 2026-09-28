@@ -198,6 +198,67 @@ fn prompt_filters_status_side_and_fences() {
 }
 
 #[test]
+fn initial_context_gaps_match_the_compared_file_boundaries() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    git(root, &["init", "-q"]);
+    // No final newline: the last physical line still counts toward omitted context.
+    let original = (1..=30)
+        .map(|i| format!("line {i}"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    fs::write(root.join("file.txt"), &original).unwrap();
+    git(root, &["add", "."]);
+    git(
+        root,
+        &[
+            "-c",
+            "user.name=Test",
+            "-c",
+            "user.email=t@x",
+            "-c",
+            "commit.gpgsign=false",
+            "commit",
+            "-qm",
+            "base",
+        ],
+    );
+    for (line, leading, trailing) in [
+        (1, false, true),
+        (15, true, true),
+        (27, true, false),
+        (30, true, false),
+    ] {
+        fs::write(
+            root.join("file.txt"),
+            original
+                .lines()
+                .map(|text| {
+                    if text == format!("line {line}") {
+                        format!("changed {line}")
+                    } else {
+                        text.to_owned()
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join("\n"),
+        )
+        .unwrap();
+        let review = review::snapshot(root.to_str().unwrap(), "HEAD", "").unwrap();
+        for split in [false, true] {
+            let mut app = App::new(review.clone(), root.join(".git/state.json"));
+            app.set_split(split).unwrap();
+            app.ensure_view();
+            let rows = &app.view().unwrap().rows;
+            let gaps = [Row::Gap(false), Row::Gap(true), Row::Gap(false)];
+            assert_eq!(rows.starts_with(&gaps), leading, "line {line}");
+            assert_eq!(rows.ends_with(&gaps), trailing, "line {line}");
+            assert!(app.view().unwrap().expanded.is_none());
+        }
+    }
+}
+
+#[test]
 fn file_expand_preserves_diff_comments_and_supports_full_file_navigation() {
     let dir = tempfile::tempdir().unwrap();
     let root = dir.path();
@@ -279,6 +340,9 @@ fn file_expand_preserves_diff_comments_and_supports_full_file_navigation() {
         app.side = usize::from(split);
         app.wrap = true;
         draw(&mut app, &mut terminal);
+        let gaps = [Row::Gap(false), Row::Gap(true), Row::Gap(false)];
+        assert!(app.view().unwrap().rows.starts_with(&gaps));
+        assert!(app.view().unwrap().rows.ends_with(&gaps));
         app.cursor[0] = app
             .view()
             .unwrap()
@@ -327,6 +391,8 @@ fn file_expand_preserves_diff_comments_and_supports_full_file_navigation() {
         press(&mut app, K::Char('Z'));
         draw(&mut app, &mut terminal);
         assert!(app.view().unwrap().expanded.is_none());
+        assert!(app.view().unwrap().rows.starts_with(&gaps));
+        assert!(app.view().unwrap().rows.ends_with(&gaps));
         assert_eq!(
             app.view().unwrap().source(app.cursor[0], app.side),
             Some(source)

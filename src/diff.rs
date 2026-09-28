@@ -95,6 +95,7 @@ pub struct Token {
 
 pub struct FileView {
     pub expanded: Option<File>,
+    pub trailing_context: bool,
     pub context_visible: Option<Vec<bool>>,
     source_indices: Vec<Option<usize>>,
     display_indices: Vec<Option<usize>>,
@@ -183,6 +184,7 @@ impl FileView {
         }
         let mut view = Self {
             expanded: None,
+            trailing_context: false,
             context_visible: None,
             source_indices: Vec::new(),
             display_indices: Vec::new(),
@@ -226,6 +228,10 @@ impl FileView {
     pub fn rebuild_rows(&mut self, file: &File, split: bool) {
         let Some(mut expanded) = self.expanded.take() else {
             self.rebuild_display_rows(file, split);
+            if self.trailing_context {
+                self.rows
+                    .extend([Row::Gap(false), Row::Gap(true), Row::Gap(false)]);
+            }
             return;
         };
         expanded.comments = file.comments.clone();
@@ -447,7 +453,7 @@ impl FileView {
                     .map(|i| file.lines[*i].new)
                     .max()
                     .unwrap_or(0);
-                if last_hunk != hunk && (old > 0 && o > old + 1 || new > 0 && n > new + 1) {
+                if last_hunk != hunk && (o > old + 1 || n > new + 1) {
                     self.rows
                         .extend([Row::Gap(false), Row::Gap(true), Row::Gap(false)]);
                 }
