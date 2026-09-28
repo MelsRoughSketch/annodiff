@@ -342,11 +342,19 @@ impl App {
             self.side = 0;
         }
     }
-    pub fn toggle_expand(&mut self) -> Result<()> {
+    pub fn expand_context(&mut self, full: bool) -> Result<()> {
         self.ensure_view();
         let file = self.file.context("no selected file")?;
         let view = self.view().unwrap();
-        let expanded = view.expanded.is_some();
+        let collapse = full && view.expanded.is_some() && view.context_visible.is_none();
+        if !full && view.expanded.is_some() && view.context_visible.is_none() {
+            self.status = "All context is already visible · Z: collapse".into();
+            return Ok(());
+        }
+        let display = view
+            .expanded
+            .as_ref()
+            .and_then(|_| view.display_source(self.cursor[0], self.side));
         let source = view.source(self.cursor[0], self.side).or_else(|| {
             (self.cursor[0]..view.len())
                 .chain((0..self.cursor[0]).rev())
@@ -355,23 +363,42 @@ impl App {
         let anchor = self
             .anchor
             .and_then(|(row, side)| Some((view.source(row, side)?, side)));
+        let screen_row = self.cursor[0].saturating_sub(self.offset);
         let f = &self.review.files[file];
-        let mut next = if expanded {
-            FileView::new(f, self.split())
+        if collapse || view.expanded.is_none() {
+            let next = if collapse {
+                FileView::new(f, self.split())
+            } else {
+                FileView::expand(f, review::expand_file(&self.review, f)?, self.split())?
+            };
+            *self.view_mut().unwrap() = next;
+        }
+        let split = self.split();
+        let view = &mut self.cache.iter_mut().find(|(i, _)| *i == file).unwrap().1;
+        view.layout(self.diff_inner.width as usize, self.bias, self.wrap);
+        let display = if collapse { None } else { display }.or_else(|| {
+            source
+                .and_then(|i| view.visual_for_source(i, self.side))
+                .and_then(|row| view.display_source(row, self.side))
+        });
+        if full {
+            view.context_visible = None;
         } else {
-            FileView::expand(f, review::expand_file(&self.review, f)?, self.split())?
-        };
-        next.layout(self.diff_inner.width as usize, self.bias, self.wrap);
-        self.cursor[0] = source
-            .and_then(|i| next.visual_for_source(i, self.side))
+            view.expand_near(display.unwrap_or(0));
+        }
+        view.rebuild_rows(&self.review.files[file], split);
+        view.layout(self.diff_inner.width as usize, self.bias, self.wrap);
+        self.cursor[0] = display
+            .and_then(|i| view.visual_for_display(i, self.side))
             .unwrap_or(0);
-        self.anchor = anchor.and_then(|(i, side)| Some((next.visual_for_source(i, side)?, side)));
-        self.offset = self.cursor[0].saturating_sub(self.diff_inner.height as usize / 2);
-        *self.view_mut().unwrap() = next;
-        self.status = if expanded {
+        self.anchor = anchor.and_then(|(i, side)| Some((view.visual_for_source(i, side)?, side)));
+        self.offset = self.cursor[0].saturating_sub(screen_row);
+        self.status = if collapse {
             "Diff context restored"
+        } else if full {
+            "Full file · Z: collapse · expanded context is read-only"
         } else {
-            "Full file · z: collapse · expanded context is read-only"
+            "Context expanded · z: show 10 more nearby lines · Z: full file"
         }
         .into();
         Ok(())
@@ -1459,7 +1486,7 @@ impl App {
             return Ok(Effect::None);
         }
         match key.code {
-            K::Char('f' | 'z' | '[' | ']') => self.focus(0),
+            K::Char('f' | 'z' | 'Z' | '[' | ']') => self.focus(0),
             K::Char('v' | 'x' | 'd') if self.pane != 2 => self.focus(0),
             K::Char('c' | 'e') if self.pane == 2 || self.pane == 3 => self.focus(0),
             K::Char('n' | 'N')
@@ -1550,7 +1577,7 @@ impl App {
                 }
             }
             K::Char('s') => self.set_split(!self.review.split)?,
-            K::Char('z') => self.toggle_expand()?,
+            K::Char('z' | 'Z') => self.expand_context(code == K::Char('Z'))?,
             K::Char('f') => {
                 self.focus(0);
                 self.wrap = !self.wrap;

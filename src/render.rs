@@ -383,7 +383,13 @@ fn draw_diff(app: &mut App, frame: &mut Frame) {
         format!(" · /{} ", app.queries[0])
     }));
     if app.view().is_some_and(|v| v.expanded.is_some()) {
-        spans.push(Span::raw(" · full file · z: collapse "));
+        spans.push(Span::raw(
+            if app.view().is_some_and(|v| v.context_visible.is_some()) {
+                " · expanded context · z: more "
+            } else {
+                " · full file · Z: collapse "
+            },
+        ));
     }
     let border = block(Line::from(spans), app.pane == 0);
     app.diff_inner = border.inner(rect);
@@ -473,7 +479,7 @@ fn draw_diff(app: &mut App, frame: &mut Frame) {
             Row::Gap(label) => {
                 if label {
                     frame.render_widget(
-                        Paragraph::new("⋯ unchanged lines omitted · z: expand file ⋯")
+                        Paragraph::new("⋯ unchanged lines omitted · z: expand nearby ⋯")
                             .style(Style::default().fg(Color::DarkGray)),
                         area,
                     );
@@ -1129,7 +1135,7 @@ Ctrl+Enter/F2: preview and send unsent Open comments
 r: reload diff and file/commit lists   R: choose Archive or Reset all comments   q: quit the app
 
 Diff
-z: expand/collapse the full file (additional context is read-only)
+z: expand 10 nearby lines; Z: full file / collapse (additional context is read-only)
 n/N: jump to next/previous diff hunk   s: switch unified / side-by-side display   f: toggle wrapping of long diff lines
 [: widen NEW side, narrow OLD side   ]: widen OLD side, narrow NEW side
 /: search text in the current diff   v: start/clear range; extend with j/k   c/Enter: add a comment to selected lines
@@ -1251,7 +1257,7 @@ fn help_lines(app: &App) -> Vec<Line<'static>> {
                 }
                 hints.extend([
                     "s: switch unified / side-by-side display",
-                    "z: expand/collapse the full file (additional context is read-only)",
+                    "z: expand 10 nearby lines; Z: full file / collapse (additional context is read-only)",
                     if app.wrap {
                         "f: disable wrapping of long diff lines"
                     } else {

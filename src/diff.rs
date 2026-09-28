@@ -95,6 +95,7 @@ pub struct Token {
 
 pub struct FileView {
     pub expanded: Option<File>,
+    pub context_visible: Option<Vec<bool>>,
     source_indices: Vec<Option<usize>>,
     display_indices: Vec<Option<usize>>,
     pub code: Vec<CodeLine>,
@@ -182,6 +183,7 @@ impl FileView {
         }
         let mut view = Self {
             expanded: None,
+            context_visible: None,
             source_indices: Vec::new(),
             display_indices: Vec::new(),
             code: file
@@ -232,6 +234,19 @@ impl FileView {
             comment.end = self.display_indices[comment.end].unwrap();
         }
         self.rebuild_display_rows(&expanded, split);
+        if let Some(visible) = &self.context_visible {
+            let mut rows = Vec::new();
+            for row in self.rows.drain(..) {
+                if matches!(row, Row::Code(pair) if !pair.iter().flatten().any(|i| visible[*i])) {
+                    if !matches!(rows.last(), Some(Row::Gap(_))) {
+                        rows.push(Row::Gap(true));
+                    }
+                } else {
+                    rows.push(row);
+                }
+            }
+            self.rows = rows;
+        }
         // Full context merges Git hunks; retain navigation between the original hunks.
         let mut hunk = 0;
         let hunks: Vec<_> = file
@@ -310,6 +325,34 @@ impl FileView {
             self.source_indices[display]
         } else {
             Some(display)
+        }
+    }
+    pub fn expand_near(&mut self, display: usize) {
+        let file = self.expanded.as_ref().unwrap();
+        let visible = self.context_visible.get_or_insert_with(|| {
+            file.lines
+                .iter()
+                .enumerate()
+                .map(|(i, l)| self.source_indices[i].is_some() || l.old == 0 && l.new == 0)
+                .collect()
+        });
+        let Some(next) = (0..visible.len())
+            .filter(|i| !visible[*i])
+            .min_by_key(|i| i.abs_diff(display))
+        else {
+            return;
+        };
+        let step = if next < display { -1 } else { 1 };
+        let mut i = next;
+        for _ in 0..10 {
+            if visible[i] {
+                break;
+            }
+            visible[i] = true;
+            let Some(next) = i.checked_add_signed(step).filter(|i| *i < visible.len()) else {
+                break;
+            };
+            i = next;
         }
     }
     fn rebuild_display_rows(&mut self, file: &File, split: bool) {

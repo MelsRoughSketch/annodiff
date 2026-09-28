@@ -285,8 +285,43 @@ fn file_expand_preserves_diff_comments_and_supports_full_file_navigation() {
             .visual_for_source(source, app.side)
             .unwrap();
         let hunks = app.view().unwrap().hunk_rows.clone().map(|rows| rows.len());
-        press(&mut app, K::Char('z'));
+        for count in [10, 20] {
+            press(&mut app, K::Char('z'));
+            draw(&mut app, &mut terminal);
+            let view = app.view().unwrap();
+            let added: Vec<_> = view
+                .rows
+                .iter()
+                .filter_map(|row| {
+                    let Row::Code(pair) = row else { return None };
+                    let i = *pair.iter().flatten().next()?;
+                    view.original_source(i).is_none().then_some(i)
+                })
+                .collect();
+            assert_eq!(added.len(), count);
+            assert!(
+                !added
+                    .iter()
+                    .any(|i| view.code[*i].text.starts_with("line 80:"))
+            );
+            assert_eq!(view.source(app.cursor[0], app.side), Some(source));
+            assert!(view.rows.iter().any(|row| matches!(row, Row::Gap(true))));
+            assert_eq!(app.selected_ref().unwrap().comment, 0);
+        }
+        let visibility = app.view().unwrap().context_visible.clone();
+        app.set_split(!split).unwrap();
+        app.set_split(split).unwrap();
+        assert_eq!(app.view().unwrap().context_visible, visibility);
+        app.side = usize::from(split);
+        app.cursor[0] = app
+            .view()
+            .unwrap()
+            .visual_for_source(source, app.side)
+            .unwrap();
+        press(&mut app, K::Char('Z'));
         draw(&mut app, &mut terminal);
+        press(&mut app, K::Char('z'));
+        assert!(app.view().unwrap().context_visible.is_none());
         assert_eq!(
             app.view().unwrap().source(app.cursor[0], app.side),
             Some(source)
@@ -347,7 +382,7 @@ fn file_expand_preserves_diff_comments_and_supports_full_file_navigation() {
         assert_eq!(updated.files[0].lines, saved.files[0].lines);
         assert_eq!(updated.files[0].comments[0].start, source);
         assert!(updated.prompt().contains("changed 20:"));
-        press(&mut app, K::Char('z'));
+        press(&mut app, K::Char('Z'));
         draw(&mut app, &mut terminal);
         assert!(app.view().unwrap().expanded.is_none());
         assert_eq!(
@@ -363,7 +398,7 @@ fn file_expand_preserves_diff_comments_and_supports_full_file_navigation() {
     .unwrap();
     let mut app = App::new(snapshot.clone(), root.join(".git/stale.json"));
     assert!(
-        app.toggle_expand()
+        app.expand_context(true)
             .unwrap_err()
             .to_string()
             .contains("refresh")
