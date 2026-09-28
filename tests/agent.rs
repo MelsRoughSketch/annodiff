@@ -91,12 +91,12 @@ fn session_name_accepts_null_missing_and_empty() {
         Some(json!("")),
         Some(json!("Named session")),
     ] {
-        let mut value =
-            json!({"id":"thread", "preview":"Preview fallback", "cwd":"/repo", "updatedAt":1});
+        let mut value = json!({"id":"thread", "preview":"Preview fallback", "cwd":"/repo", "updatedAt":1, "current":true});
         if let Some(name) = name {
             value["name"] = name;
         }
         let session: agent::Session = serde_json::from_value(value.clone()).unwrap();
+        assert!(!session.current);
         assert_eq!(
             session.title(),
             if value["name"] == "Named session" {

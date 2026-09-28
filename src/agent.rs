@@ -2,6 +2,7 @@ use anyhow::{Context, Result, bail, ensure};
 use serde::Deserialize;
 use serde_json::{Value, json};
 use std::{
+    collections::HashSet,
     io::{BufRead, BufReader, Write},
     path::{Path, PathBuf},
     process::{Child, ChildStdin, Command, Stdio},
@@ -22,10 +23,13 @@ pub struct Session {
     pub preview: String,
     pub cwd: String,
     pub updated_at: i64,
+    /// Computed once for the directory used to list sessions, never trusted from RPC.
+    #[serde(skip)]
+    pub current: bool,
 }
 impl Session {
-    pub fn matches(&self, root: &str, current_only: bool, query: &str) -> bool {
-        (!current_only || Path::new(&self.cwd) == Path::new(root))
+    pub fn matches(&self, current_only: bool, query: &str) -> bool {
+        (!current_only || self.current)
             && format!("{} {} {}", self.title(), self.id, self.cwd)
                 .to_lowercase()
                 .contains(query)
@@ -141,6 +145,54 @@ impl RpcProcess {
         }
     }
 }
+fn normalized_path(path: &Path) -> PathBuf {
+    path.canonicalize().unwrap_or_else(|_| path.to_path_buf())
+}
+
+fn session_directories(root: &Path) -> HashSet<PathBuf> {
+    let root = normalized_path(root);
+    let mut directories = HashSet::from([root.clone()]);
+    let git = |args: &[&str]| {
+        Command::new("git")
+            .arg("-C")
+            .arg(&root)
+            .args(args)
+            .output()
+            .ok()
+            .filter(|out| out.status.success())
+            .map(|out| out.stdout)
+    };
+    let Some(top) =
+        git(&["rev-parse", "--show-toplevel"]).and_then(|bytes| String::from_utf8(bytes).ok())
+    else {
+        return directories;
+    };
+    let top = normalized_path(Path::new(top.strip_suffix('\n').unwrap_or(&top)));
+    let Ok(relative) = root.strip_prefix(&top) else {
+        return directories;
+    };
+    // Codex PWD includes the corresponding directory in linked worktrees, not all descendants.
+    if let Some(output) = git(&["worktree", "list", "--porcelain", "-z"]) {
+        for field in output.split(|b| *b == 0) {
+            if let Some(checkout) = field
+                .strip_prefix(b"worktree ")
+                .and_then(|p| std::str::from_utf8(p).ok())
+            {
+                let checkout = normalized_path(Path::new(checkout));
+                let candidate = normalized_path(&checkout.join(relative));
+                if candidate.is_dir()
+                    && candidate.strip_prefix(&checkout).ok() == Some(relative)
+                    && candidate.ancestors().find(|p| p.join(".git").exists())
+                        == Some(checkout.as_path())
+                {
+                    directories.insert(candidate);
+                }
+            }
+        }
+    }
+    directories
+}
+
 pub fn sessions(root: &str, cancel: Arc<AtomicBool>) -> Result<Vec<Session>> {
     let mut rpc = RpcProcess::start(root, cancel)?;
     let mut sessions = Vec::new();
@@ -158,9 +210,14 @@ pub fn sessions(root: &str, cancel: Arc<AtomicBool>) -> Result<Vec<Session>> {
         ensure!(next != cursor, "Codex returned a repeated cursor");
         cursor = next;
     }
+    let directories = session_directories(Path::new(root));
+    for session in &mut sessions {
+        session.current = !session.cwd.is_empty()
+            && directories.contains(&normalized_path(Path::new(&session.cwd)));
+    }
     sessions.sort_by(|a, b| {
-        (b.cwd == root)
-            .cmp(&(a.cwd == root))
+        b.current
+            .cmp(&a.current)
             .then_with(|| b.updated_at.cmp(&a.updated_at))
     });
     Ok(sessions)
@@ -309,4 +366,90 @@ pub fn editor_command(root: &str, path: &Path, line: usize) -> Command {
         .args(args)
         .current_dir(root);
     command
+}
+
+#[cfg(test)]
+mod scope_tests {
+    use super::*;
+
+    #[test]
+    fn pwd_scope_matches_linked_worktrees_at_the_same_relative_directory() {
+        let temp = tempfile::tempdir().unwrap();
+        let primary = temp.path().join("primary 日本語");
+        let linked = temp.path().join("linked checkout");
+        let other = temp.path().join("other");
+        let git = |root: &Path, args: &[&str]| {
+            let output = Command::new("git")
+                .arg("-C")
+                .arg(root)
+                .env("GIT_CONFIG_GLOBAL", "/dev/null")
+                .env("GIT_CONFIG_SYSTEM", "/dev/null")
+                .args(args)
+                .output()
+                .unwrap();
+            assert!(
+                output.status.success(),
+                "{}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+        };
+        std::fs::create_dir_all(primary.join("src")).unwrap();
+        std::fs::write(primary.join("src/file"), "content").unwrap();
+        git(&primary, &["init", "-q"]);
+        git(&primary, &["add", "."]);
+        git(
+            &primary,
+            &[
+                "-c",
+                "user.name=Test",
+                "-c",
+                "user.email=test@example.invalid",
+                "-c",
+                "commit.gpgsign=false",
+                "commit",
+                "-qm",
+                "initial",
+            ],
+        );
+        git(
+            &primary,
+            &["worktree", "add", "--detach", linked.to_str().unwrap()],
+        );
+        let roots = HashSet::from([normalized_path(&primary), normalized_path(&linked)]);
+        assert_eq!(session_directories(&primary), roots);
+        assert_eq!(session_directories(&linked), roots);
+        let subdirs = HashSet::from([
+            normalized_path(&primary.join("src")),
+            normalized_path(&linked.join("src")),
+        ]);
+        assert_eq!(session_directories(&primary.join("src")), subdirs);
+        assert_eq!(session_directories(&linked.join("src")), subdirs);
+        assert_eq!(session_directories(&primary.join("src/..")), roots);
+        std::fs::create_dir(&other).unwrap();
+        git(&other, &["init", "-q"]);
+        assert_eq!(
+            session_directories(&other),
+            HashSet::from([normalized_path(&other)])
+        );
+        let missing = temp.path().join("missing");
+        assert_eq!(session_directories(&missing), HashSet::from([missing]));
+        #[cfg(unix)]
+        {
+            let alias = temp.path().join("alias");
+            std::os::unix::fs::symlink(&primary, &alias).unwrap();
+            assert_eq!(session_directories(&alias), roots);
+            assert_eq!(normalized_path(&alias), normalized_path(&primary));
+        }
+        std::fs::create_dir(primary.join("only-here")).unwrap();
+        assert_eq!(
+            session_directories(&primary.join("only-here")),
+            HashSet::from([normalized_path(&primary.join("only-here"))])
+        );
+        // A nested repository at the corresponding path is not the same project directory.
+        git(&linked.join("src"), &["init", "-q"]);
+        assert_eq!(
+            session_directories(&primary.join("src")),
+            HashSet::from([normalized_path(&primary.join("src"))])
+        );
+    }
 }

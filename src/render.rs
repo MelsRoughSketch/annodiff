@@ -949,11 +949,11 @@ fn draw_modal(
             labels.extend(
                 items
                     .iter()
-                    .filter(|s| s.matches(&review.root, *current_only, &query))
+                    .filter(|s| s.matches(*current_only, &query))
                     .map(|s| {
                         format!(
                             "{}{} · {}",
-                            if s.cwd == review.root { "[here] " } else { "" },
+                            if s.current { "[here] " } else { "" },
                             s.title().split_whitespace().collect::<Vec<_>>().join(" "),
                             s.cwd
                         )

@@ -1824,7 +1824,7 @@ impl App {
                 let query = input.lines().join(" ").to_lowercase();
                 let filtered: Vec<_> = items
                     .iter()
-                    .filter(|s| s.matches(&self.review.root, *current_only, &query))
+                    .filter(|s| s.matches(*current_only, &query))
                     .collect();
                 if key.code == K::Enter || save_key(key) {
                     let copy = *selection == 1;

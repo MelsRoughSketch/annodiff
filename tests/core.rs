@@ -1075,6 +1075,7 @@ fn session_directory_scope_combines_with_search_and_selects_visible_session() {
     let dir = tempfile::tempdir().unwrap();
     let here = Session {
         id: "here".into(),
+        current: true,
         cwd: "/repo".into(),
         preview: "Fix local".into(),
         ..Default::default()
@@ -1085,10 +1086,10 @@ fn session_directory_scope_combines_with_search_and_selects_visible_session() {
         preview: "Fix elsewhere".into(),
         ..Default::default()
     };
-    assert!(here.matches("/repo/", true, "fix"));
-    assert!(!other.matches("/repo", true, "fix"));
-    assert!(other.matches("/repo", false, "fix"));
-    assert!(!here.matches("/repo", false, "elsewhere"));
+    assert!(here.matches(true, "fix"));
+    assert!(!other.matches(true, "fix"));
+    assert!(other.matches(false, "fix"));
+    assert!(!here.matches(false, "elsewhere"));
     let mut app = App::new(
         Review {
             root: "/repo".into(),
@@ -1097,7 +1098,17 @@ fn session_directory_scope_combines_with_search_and_selects_visible_session() {
         dir.path().join("state.json"),
     );
     app.modal = Some(Modal::Sessions {
-        items: vec![here, other],
+        items: vec![
+            here,
+            Session {
+                id: "linked".into(),
+                cwd: "/repo-worktree".into(),
+                preview: "Fix linked".into(),
+                current: true,
+                ..Default::default()
+            },
+            other,
+        ],
         input: ratatui_textarea::TextArea::new(vec!["fix".into()]),
         selection: 2,
         search: false,
@@ -1114,7 +1125,8 @@ fn session_directory_scope_combines_with_search_and_selects_visible_session() {
             .collect::<String>()
     };
     assert!(screen(&terminal).contains("[PWD] / All"));
-    assert!(screen(&terminal).contains("1 sessions"));
+    assert!(screen(&terminal).contains("2 sessions"));
+    assert!(screen(&terminal).contains("[here] Fix linked"));
     assert!(!screen(&terminal).contains("Fix elsewhere"));
     press(&mut app, K::Char('a'));
     assert!(
