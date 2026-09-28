@@ -1573,8 +1573,11 @@ impl App {
                         self.anchor = Some((start, side));
                     }
                 }
-                if mouse.kind == MouseEventKind::Up(MouseButton::Left) {
-                    self.drag_start = None;
+                if mouse.kind == MouseEventKind::Up(MouseButton::Left)
+                    && self.drag_start.take().is_some()
+                    && self.anchor.is_some()
+                {
+                    self.start_edit(None, false)?;
                 }
                 return Ok(Effect::None);
             }

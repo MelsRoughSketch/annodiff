@@ -1742,7 +1742,7 @@ fn diff_title_mode_clicks_focus_diff_and_mark_selected_mode() {
 }
 
 #[test]
-fn diff_drag_selects_rows_on_starting_side_and_keeps_range_after_release() {
+fn diff_drag_opens_comment_on_release_with_selected_range_and_side() {
     use crossterm::event::{MouseButton, MouseEvent, MouseEventKind};
     let dir = tempfile::tempdir().unwrap();
     let patch = format!("@@ -1,12 +1,12 @@\n{}", " context\n".repeat(12));
@@ -1787,6 +1787,7 @@ fn diff_drag_selects_rows_on_starting_side_and_keeps_range_after_release() {
         .unwrap();
         assert_eq!(app.pane, 0);
         assert!(app.anchor.is_none());
+        assert!(app.editor.is_none());
         // Horizontal motion across the split must not change the selected side.
         app.handle(mouse(
             MouseEventKind::Drag(MouseButton::Left),
@@ -1797,6 +1798,7 @@ fn diff_drag_selects_rows_on_starting_side_and_keeps_range_after_release() {
         assert_eq!(app.anchor, Some((start, side)));
         assert_eq!(app.cursor[0], end);
         assert_eq!(app.side, side);
+        assert!(app.editor.is_none());
         let expected = app.bounds().unwrap();
         app.handle(mouse(
             MouseEventKind::Up(MouseButton::Left),
@@ -1807,11 +1809,18 @@ fn diff_drag_selects_rows_on_starting_side_and_keeps_range_after_release() {
         app.handle(mouse(MouseEventKind::Drag(MouseButton::Left), x, y))
             .unwrap();
         assert_eq!(app.bounds(), Some(expected));
-        app.start_edit(None, false).unwrap();
         let comment = &app.editor.as_ref().unwrap().comment;
         assert_eq!((comment.start, comment.end), expected);
+        assert_eq!(comment.side, if split { ["old", "new"][side] } else { "" });
         app.close_editor();
         draw(&mut app, &mut terminal);
+        // A click without a range selection must not open the editor.
+        let y = app.diff_inner.y + app.cursor[0].saturating_sub(app.offset) as u16;
+        app.handle(mouse(MouseEventKind::Down(MouseButton::Left), x, y))
+            .unwrap();
+        app.handle(mouse(MouseEventKind::Up(MouseButton::Left), x, y))
+            .unwrap();
+        assert!(app.editor.is_none());
     }
 }
 
@@ -2443,6 +2452,7 @@ fn drag_is_cancelled_when_resize_empties_diff_area() {
         .unwrap();
     assert_eq!(app.cursor[0], cursor);
     assert!(app.anchor.is_none());
+    assert!(app.editor.is_none());
 }
 
 #[test]
