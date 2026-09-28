@@ -130,6 +130,7 @@ pub struct App {
     pub stacked: bool,
     pub cursor: [usize; 4],
     pub offset: usize,
+    pub expansion_scroll_from: Option<usize>,
     pub anchor: Option<(usize, usize)>,
     drag_start: Option<(usize, usize)>,
     divider_drag: Option<(u16, i32)>,
@@ -236,6 +237,7 @@ impl App {
             stacked: false,
             cursor: [0; 4],
             offset: 0,
+            expansion_scroll_from: None,
             anchor: None,
             drag_start: None,
             divider_drag: None,
@@ -411,6 +413,7 @@ impl App {
                 .and_then(|i| view.visual_for_source(i, self.side))
                 .and_then(|row| view.display_source(row, self.side))
         });
+        let previous_display = display;
         if full {
             view.context_visible = None;
         } else {
@@ -423,6 +426,14 @@ impl App {
             .unwrap_or(0);
         self.anchor = anchor.and_then(|(i, side)| Some((view.visual_for_source(i, side)?, side)));
         self.offset = self.cursor[0].saturating_sub(screen_row);
+        self.expansion_scroll_from = if !full && display != previous_display {
+            previous_display
+                .and_then(|i| view.visual_for_display(i, self.side))
+                .map(|row| row.saturating_sub(screen_row))
+                .filter(|offset| *offset != self.offset)
+        } else {
+            None
+        };
         self.status = if collapse {
             "Diff context restored"
         } else if full {
@@ -1441,6 +1452,7 @@ impl App {
         Ok(())
     }
     pub fn handle(&mut self, event: Event) -> Result<Effect> {
+        self.expansion_scroll_from = None;
         if matches!(event, Event::Resize(..)) {
             self.pane_drag = None;
         }

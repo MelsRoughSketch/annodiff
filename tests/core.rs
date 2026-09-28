@@ -274,6 +274,7 @@ fn initial_context_gaps_match_the_compared_file_boundaries() {
                         .visual_for_source(source, app.side)
                         .unwrap();
                     app.offset = app.cursor[0].saturating_sub(3);
+                    let mut previous_line = start;
                     for number in expected {
                         let screen_row = app.cursor[0].saturating_sub(app.offset);
                         press(&mut app, K::Char('z'));
@@ -281,6 +282,23 @@ fn initial_context_gaps_match_the_compared_file_boundaries() {
                         let display = view.display_source(app.cursor[0], app.side).unwrap();
                         assert_eq!(view.expanded.as_ref().unwrap().lines[display].old, number);
                         assert_eq!(app.offset, app.cursor[0].saturating_sub(screen_row));
+                        let previous_display = view
+                            .expanded
+                            .as_ref()
+                            .unwrap()
+                            .lines
+                            .iter()
+                            .position(|line| line.old == previous_line)
+                            .unwrap();
+                        let from = view
+                            .visual_for_display(previous_display, app.side)
+                            .unwrap()
+                            .saturating_sub(screen_row);
+                        assert_eq!(
+                            app.expansion_scroll_from,
+                            (from != app.offset).then_some(from)
+                        );
+                        previous_line = number;
                         draw(&mut app, &mut terminal);
                         assert!(app.cursor[0] >= app.offset);
                         assert!(app.cursor[0] < app.offset + usize::from(app.diff_inner.height));
