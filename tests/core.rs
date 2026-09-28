@@ -471,6 +471,51 @@ fn workspace_input_edit_save_history_and_resize() {
 }
 
 #[test]
+fn pane_zoom_steps_and_layout() {
+    let temp = tempfile::tempdir().unwrap();
+    let mut app = App::new(
+        Review {
+            files: vec![fixture()],
+            ..Review::default()
+        },
+        temp.path().join("state.json"),
+    );
+    let mut t = Terminal::new(TestBackend::new(100, 32)).unwrap();
+    for pane in 0..4 {
+        app.focus(pane);
+        for zoom in 0..=2 {
+            for key in ['+', '-'] {
+                app.zoom = zoom;
+                press(&mut app, K::Char(key));
+                let expected = match (pane, key) {
+                    (0, '+') => 2,
+                    (0, '-') => 0,
+                    (_, '+') => (zoom + 1).min(2),
+                    _ => zoom.saturating_sub(1),
+                };
+                assert_eq!(app.zoom, expected);
+                draw(&mut app, &mut t);
+                assert_eq!(
+                    app.pane_rects[pane].width,
+                    if expected == 2 {
+                        100
+                    } else if pane == 0 {
+                        70
+                    } else {
+                        30
+                    }
+                );
+                if expected == 0 {
+                    for sidebar in &app.pane_rects[1..] {
+                        assert_eq!(sidebar.height, 10);
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[test]
 fn save_failure_keeps_editor_and_comment() {
     let temp = tempfile::tempdir().unwrap();
     let mut app = App::new(
