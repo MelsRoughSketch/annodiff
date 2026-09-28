@@ -60,6 +60,22 @@ with tempfile.TemporaryDirectory(prefix="annodiff-cli-") as directory:
     files = {f["Path"]: f for f in state["Files"]}
     assert set(files) == {source.name, "new\nfile.txt"}
     assert "+new" in files[source.name]["Patch"]
+    # One non-UTF-8 file must not turn the batch into one Git process per file.
+    for i in range(24):
+        (root / f"batch-{i:02}.txt").write_bytes(b"old\n")
+    run("git", "add", ".", cwd=root)
+    run("git", "-c", "user.name=Test", "-c", "user.email=test@example.com",
+        "-c", "commit.gpgsign=false", "commit", "-qm", "batch base", cwd=root)
+    for i in range(24):
+        (root / f"batch-{i:02}.txt").write_bytes(b"new \x82\xa0\n" if i == 7 else b"new\n")
+    trace = root / ".git/diff-trace"
+    state = json.loads(subprocess.check_output(
+        [str(binary), "--snapshot-json", str(root)], env=dict(env, GIT_TRACE=str(trace))))
+    files = {f["Path"]: f for f in state["Files"]}
+    assert len(files) == 24
+    assert files["batch-07.txt"]["Patch"].startswith("Non-UTF-8 diff (base64):")
+    assert all("+new" in f["Patch"] for name, f in files.items() if name != "batch-07.txt")
+    assert sum("built-in: git diff " in line for line in trace.read_text().splitlines()) == 2
     # Preserve path whitespace; neither sibling may resolve to the existing repo.
     for suffix in (" ", "\n"):
         spaced = directory / ("repo" + suffix)

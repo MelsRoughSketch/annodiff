@@ -198,6 +198,121 @@ fn prompt_filters_status_side_and_fences() {
 }
 
 #[test]
+fn commit_selection_survives_non_utf8_diff_content() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    git(root, &["init", "-q"]);
+    for name in ["legacy.txt", "normal.txt"] {
+        fs::write(root.join(name), "old\n").unwrap();
+    }
+    git(root, &["add", "."]);
+    git(
+        root,
+        &[
+            "-c",
+            "user.name=Test",
+            "-c",
+            "user.email=t@x",
+            "-c",
+            "commit.gpgsign=false",
+            "commit",
+            "-qm",
+            "base",
+        ],
+    );
+    let base = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+    fs::write(root.join("legacy.txt"), b"new \x82\xa0\n").unwrap();
+    fs::write(root.join("normal.txt"), "new\n").unwrap();
+    git(root, &["add", "."]);
+    git(
+        root,
+        &[
+            "-c",
+            "user.name=Test",
+            "-c",
+            "user.email=t@x",
+            "-c",
+            "commit.gpgsign=false",
+            "commit",
+            "-qm",
+            "target",
+        ],
+    );
+    let state = root.join(".git/review.json");
+    let mut app = App::new(
+        review::snapshot(root.to_str().unwrap(), "", "").unwrap(),
+        state.clone(),
+    );
+    app.commits = review::commits(root.to_str().unwrap()).unwrap();
+    app.rebuild_lists();
+    app.focus(3);
+    let index = app.commits.iter().position(|c| c.id == base).unwrap();
+    app.cursor[3] = app
+        .commit_rows
+        .iter()
+        .position(|r| *r == Some(index))
+        .unwrap();
+    app.select_commit().unwrap();
+    assert_eq!(app.review.base, base);
+    let legacy = app
+        .review
+        .files
+        .iter()
+        .position(|f| f.path == "legacy.txt")
+        .unwrap();
+    let file = &app.review.files[legacy];
+    assert!(file.lines.iter().all(|l| l.old == 0 && l.new == 0));
+    assert!(file.lines[0].text.contains("not UTF-8"));
+    use base64::{Engine, engine::general_purpose::STANDARD};
+    let raw = review::git(root.to_str().unwrap(), &["diff", &base, "--", "legacy.txt"]).unwrap();
+    assert_eq!(
+        STANDARD
+            .decode(file.patch.split_once('\n').unwrap().1)
+            .unwrap(),
+        raw
+    );
+    assert!(
+        app.review
+            .files
+            .iter()
+            .any(|f| f.path == "normal.txt" && f.patch.contains("+new"))
+    );
+    app.select_file(Some(legacy));
+    app.focus(0);
+    let mut terminal = Terminal::new(TestBackend::new(100, 30)).unwrap();
+    draw(&mut app, &mut terminal);
+    assert!(app.start_edit(None, false).is_err());
+    app.start_edit(None, true).unwrap();
+    app.editor
+        .as_mut()
+        .unwrap()
+        .input
+        .insert_str("Check this file");
+    app.save_editor().unwrap();
+    assert!(Review::load(&state).unwrap().files[legacy].comments[0].file);
+    let before = app.review.clone();
+    fs::write(root.join("legacy.txt"), b"new \x82\xa2\n").unwrap();
+    let after = review::snapshot(root.to_str().unwrap(), &base, "").unwrap();
+    assert!(!before.same_diff(&after));
+    let refreshed = before.refresh(after, false);
+    assert_eq!(refreshed.history[0].comments[0].text, "Check this file");
+    let revision = review::snapshot(root.to_str().unwrap(), &base, "HEAD").unwrap();
+    assert_eq!(revision.files[legacy].patch, before.files[legacy].patch);
+    fs::write(root.join("untracked.txt"), b"\xff\n").unwrap();
+    let working = review::snapshot(root.to_str().unwrap(), "", "").unwrap();
+    assert!(
+        working
+            .files
+            .iter()
+            .find(|f| f.path == "untracked.txt")
+            .unwrap()
+            .lines[0]
+            .text
+            .contains("not UTF-8")
+    );
+}
+
+#[test]
 fn git_snapshot_worktree_and_literal_names() {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path();
