@@ -3372,6 +3372,98 @@ fn file_tree_refresh_preserves_paths_and_folds_when_indices_change() {
 }
 
 #[test]
+fn sidebar_selected_row_click_opens_comments_without_activating_other_rows() {
+    use annodiff::app::FileRow;
+    use crossterm::event::{MouseButton, MouseEvent, MouseEventKind};
+    let dir = tempfile::tempdir().unwrap();
+    let mut first = fixture();
+    first.path = "a.rs".into();
+    first.comments = ["first note", "second note"]
+        .map(|text| Comment {
+            file: true,
+            text: text.into(),
+            ..Default::default()
+        })
+        .into();
+    let history = first.clone();
+    let mut app = App::new(
+        Review {
+            files: vec![
+                first,
+                File {
+                    path: "b.rs".into(),
+                    ..fixture()
+                },
+                File {
+                    path: "src/c.rs".into(),
+                    ..fixture()
+                },
+            ],
+            history: vec![history],
+            ..Default::default()
+        },
+        dir.path().join("state.json"),
+    );
+    app.file_only = false;
+    app.open_only = false;
+    app.rebuild_comments();
+    let mut terminal = Terminal::new(TestBackend::new(120, 50)).unwrap();
+    let click = |app: &mut App, pane: usize, row: u16| {
+        let rect = app.pane_rects[pane];
+        app.handle(Event::Mouse(MouseEvent {
+            kind: MouseEventKind::Down(MouseButton::Left),
+            column: rect.x + 2,
+            row: rect.y + row,
+            modifiers: M::NONE,
+        }))
+        .unwrap();
+    };
+    app.focus(0);
+    draw(&mut app, &mut terminal);
+    click(&mut app, 1, 1);
+    assert!(app.editor.is_none()); // First acquire pane focus.
+    click(&mut app, 1, 1);
+    assert!(app.editor.as_ref().unwrap().comment.file);
+    assert_eq!(app.file, Some(0));
+    app.close_editor();
+    click(&mut app, 1, 2);
+    assert!(app.editor.is_none()); // A different row only selects.
+    click(&mut app, 1, 2);
+    assert!(app.editor.as_ref().unwrap().comment.file);
+    assert_eq!(app.file, Some(1));
+    app.close_editor();
+    let tree = app.tree_rows.clone();
+    assert!(matches!(tree[2], FileRow::Directory(_)));
+    click(&mut app, 1, 3);
+    click(&mut app, 1, 3);
+    assert!(app.editor.is_none());
+    assert_eq!(app.tree_rows, tree);
+    // Borders and unused space cannot activate or clamp to a file row.
+    let selected = app.cursor[1];
+    click(&mut app, 1, 0);
+    click(&mut app, 1, 6);
+    assert_eq!(app.cursor[1], selected);
+    assert!(app.editor.is_none());
+    click(&mut app, 2, 1);
+    assert!(app.editor.is_none());
+    click(&mut app, 2, 1);
+    assert_eq!(app.editor.as_ref().unwrap().input.lines(), &["first note"]);
+    assert!(app.editor.as_ref().unwrap().reference.is_some());
+    app.close_editor();
+    draw(&mut app, &mut terminal);
+    click(&mut app, 2, 2);
+    assert!(app.editor.is_none());
+    click(&mut app, 2, 2);
+    assert_eq!(app.editor.as_ref().unwrap().input.lines(), &["second note"]);
+    app.close_editor();
+    let historical = app.refs.iter().position(|r| r.history).unwrap();
+    click(&mut app, 2, historical as u16 + 1);
+    click(&mut app, 2, historical as u16 + 1);
+    assert!(app.editor.is_none());
+    assert!(matches!(app.modal, Some(Modal::Inspect(_))));
+}
+
+#[test]
 fn deleting_all_input_leaves_only_the_terminal_cursor() {
     use ratatui::{backend::Backend, style::Modifier};
     for search in [false, true] {
