@@ -1058,6 +1058,7 @@ fn quit_from_session_picker_and_preview_but_type_q_in_search() {
             id: String::new(),
             copy: false,
             archived: false,
+            list_offset: 0,
             selection: 0,
             pane,
             offsets: [0; 2],
@@ -2451,6 +2452,7 @@ fn wrapped_comment_tail_is_visible_in_inspection_and_send_preview() {
                 id: String::new(),
                 copy: true,
                 archived: false,
+                list_offset: 0,
                 selection: 0,
                 pane: 1,
                 offsets: [0; 2],
@@ -2743,6 +2745,7 @@ fn historical_comment_preview_preserves_archive_and_legacy_state() {
         id: String::new(),
         copy: true,
         archived: false,
+        list_offset: 0,
         selection: 0,
         pane: 0,
         offsets: [0; 2],
@@ -2990,6 +2993,33 @@ fn session_picker_scroll_margin_and_wheel_preserve_selection() {
         .unwrap();
     draw(&mut app, &mut terminal);
     assert_eq!(viewport(&app).1, 0);
+    // Narrow terminals keep every filter visible above the clickable session rows.
+    terminal.backend_mut().resize(80, 24);
+    draw(&mut app, &mut terminal);
+    let screen: String = terminal
+        .backend()
+        .buffer()
+        .content
+        .iter()
+        .map(|c| c.symbol())
+        .collect();
+    for label in [
+        "Filter: [CWD] / All",
+        "Status: [Active] / Archived",
+        "Sort: [Updated] / Created",
+    ] {
+        assert!(screen.contains(label), "missing {label}");
+    }
+    let Some(Modal::Sessions {
+        filter_areas, area, ..
+    }) = &app.modal
+    else {
+        panic!()
+    };
+    for rect in filter_areas.iter().flatten() {
+        assert!(rect.width > 0 && rect.height == 1);
+        assert!(rect.right() < 80 && rect.y < area.y);
+    }
     // Sort clicks also leave search mode and preserve the query.
     let Some(Modal::Sessions { filter_areas, .. }) = &app.modal else {
         panic!()
@@ -3031,9 +3061,7 @@ fn session_picker_scroll_margin_and_wheel_preserve_selection() {
         );
         draw(&mut app, &mut terminal);
     }
-    terminal
-        .resize(ratatui::layout::Rect::new(0, 0, 120, 8))
-        .unwrap();
+    terminal.backend_mut().resize(120, 8);
     press(&mut app, K::Down);
     press(&mut app, K::Down);
     draw(&mut app, &mut terminal);
@@ -3050,4 +3078,61 @@ fn session_picker_scroll_margin_and_wheel_preserve_selection() {
         .unwrap();
     assert!(matches!(effect, Effect::None));
     assert!(matches!(&app.modal, Some(Modal::Preview { id, .. }) if id == "49"));
+}
+
+#[test]
+fn send_preview_preserves_scroll_offset_and_cursor_margin() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut file = fixture();
+    file.comments = (0..50)
+        .map(|i| Comment {
+            file: true,
+            text: format!("Comment {i}"),
+            ..Default::default()
+        })
+        .collect();
+    let mut app = App::new(
+        Review {
+            files: vec![file],
+            ..Default::default()
+        },
+        dir.path().join("state.json"),
+    );
+    app.modal = Some(Modal::Preview {
+        destination: "Clipboard".into(),
+        id: String::new(),
+        copy: true,
+        archived: false,
+        list_offset: 0,
+        selection: 45,
+        pane: 0,
+        offsets: [0; 2],
+    });
+    let mut terminal = Terminal::new(TestBackend::new(120, 30)).unwrap();
+    let selected_row = |terminal: &Terminal<TestBackend>| {
+        (0..30)
+            .find(|y| {
+                terminal.backend().buffer()[(1, *y)].bg == ratatui::style::Color::Rgb(224, 255, 255)
+            })
+            .unwrap()
+    };
+    draw(&mut app, &mut terminal);
+    let before = selected_row(&terminal);
+    assert!(before < 26); // Keep space below the selected comment.
+    let Some(Modal::Preview {
+        list_offset: before_offset,
+        ..
+    }) = app.modal
+    else {
+        panic!()
+    };
+    assert!(before_offset > 0);
+    press(&mut app, K::Up);
+    draw(&mut app, &mut terminal);
+    assert_eq!(selected_row(&terminal) + 1, before);
+    assert!(
+        matches!(app.modal, Some(Modal::Preview { list_offset, .. }) if list_offset == before_offset)
+    );
+    draw(&mut app, &mut terminal);
+    assert_eq!(selected_row(&terminal) + 1, before);
 }

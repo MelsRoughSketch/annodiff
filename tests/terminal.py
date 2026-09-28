@@ -51,6 +51,7 @@ if sys.argv[1:] == ["app-server"]:
             sys.exit(0)
         result = {}
         if method == "config/read":
+            assert request["params"]["cwd"] == os.environ["FAKE_CWD"], request
             result = {"config": {"model_provider": "test-provider", "features": {"worktrees": True}}}
         elif method == "thread/list":
             params = request["params"]

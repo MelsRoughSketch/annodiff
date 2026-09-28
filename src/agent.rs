@@ -221,7 +221,7 @@ impl SessionClient {
     ) -> Result<Vec<Session>> {
         self.cancel = cancel;
         self.deadline = Instant::now() + Duration::from_secs(30);
-        let config = self.call("config/read", json!({"includeLayers":false}))?;
+        let config = self.call("config/read", json!({"includeLayers":false,"cwd":root}))?;
         let provider = config["config"]["model_provider"]
             .as_str()
             .unwrap_or("openai");

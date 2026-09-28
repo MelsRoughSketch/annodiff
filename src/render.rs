@@ -105,7 +105,7 @@ fn list<'a, T: Clone + Into<Line<'a>>>(
     frame: &mut Frame,
     rect: Rect,
     labels: &[T],
-    (cursor, follow): (usize, bool),
+    (cursor, follow, margin): (usize, bool, usize),
     offset: &mut usize,
     focus: bool,
     marker: bool,
@@ -114,11 +114,12 @@ fn list<'a, T: Clone + Into<Line<'a>>>(
     if height == 0 {
         return;
     }
-    if follow && cursor < *offset {
-        *offset = cursor;
+    let margin = margin.min(height.saturating_sub(1) / 2);
+    if follow && cursor < offset.saturating_add(margin) {
+        *offset = cursor.saturating_sub(margin);
     }
-    if follow && cursor >= *offset + height {
-        *offset = cursor + 1 - height;
+    if follow && cursor >= offset.saturating_add(height - margin) {
+        *offset = cursor.saturating_add(margin + 1).saturating_sub(height);
     }
     *offset = (*offset).min(labels.len().saturating_sub(height));
     for (line, label) in labels.iter().enumerate().skip(*offset).take(height) {
@@ -275,7 +276,7 @@ pub fn draw(app: &mut App, frame: &mut Frame) {
             frame,
             inner,
             &app.labels[pane],
-            (app.cursor[pane], !app.manual_scroll[pane]),
+            (app.cursor[pane], !app.manual_scroll[pane], 0),
             &mut app.list_offsets[pane],
             app.pane == pane,
             true,
@@ -995,12 +996,36 @@ fn draw_modal(
                 ("Status", ["Active", "Archived"], options.archived),
                 ("Sort", ["Updated", "Created"], options.created),
             ];
+            let summary = if loading {
+                "Loading sessions… ".into()
+            } else {
+                format!("{} sessions ", labels.len().saturating_sub(2))
+            };
+            let title_width = " Destination · ".width()
+                + summary.width()
+                + usize::from(!search)
+                + filters
+                    .iter()
+                    .map(|(name, values, _)| {
+                        name.width() + 2 + values[0].width() + values[1].width() + 5 + " · ".width()
+                    })
+                    .sum::<usize>();
+            let stacked_filters = title_width + 2 > list_area.width as usize;
             let mut title = vec![Span::raw(" Destination · ")];
+            let mut filter_labels = Vec::new();
             let mut filter_areas = [[Rect::default(); 2]; 3];
+            let hit_bounds =
+                list_area.inner(ratatui::layout::Margin::new(1, u16::from(stacked_filters)));
             let mut x = list_area
                 .x
                 .saturating_add(1 + " Destination · ".width() as u16);
             for (i, (name, values, second)) in filters.iter().enumerate() {
+                let y = if stacked_filters {
+                    x = hit_bounds.x;
+                    hit_bounds.y.saturating_add(i as u16)
+                } else {
+                    list_area.y
+                };
                 let focused = !search && *control == i;
                 let mut label = format!("{}{name}: ", if focused { ">" } else { "" });
                 for (side, value) in values.iter().enumerate() {
@@ -1013,53 +1038,48 @@ fn draw_modal(
                         (*value).into()
                     };
                     let start = x.saturating_add(label.width() as u16);
-                    filter_areas[i][side] = Rect::new(
-                        start,
-                        list_area.y,
-                        (value.width() as u16)
-                            .min(list_area.right().saturating_sub(1).saturating_sub(start)),
-                        1.min(list_area.height),
-                    );
+                    filter_areas[i][side] =
+                        Rect::new(start, y, value.width() as u16, 1).intersection(hit_bounds);
                     label.push_str(&value);
                 }
                 x = x.saturating_add(label.width() as u16 + " · ".width() as u16);
-                title.push(Span::styled(
+                let span = Span::styled(
                     label,
                     if focused {
                         selected()
                     } else {
                         Style::default()
                     },
-                ));
-                title.push(Span::raw(" · "));
+                );
+                if stacked_filters {
+                    filter_labels.push(span);
+                } else {
+                    title.extend([span, Span::raw(" · ")]);
+                }
             }
-            title.push(Span::raw(if loading {
-                "Loading sessions… ".into()
-            } else {
-                format!("{} sessions ", labels.len().saturating_sub(2))
-            }));
+            title.push(Span::raw(summary));
             let border = block(Line::from(title), !search);
-            let inner = border.inner(list_area);
+            let mut inner = border.inner(list_area);
             frame.render_widget(border, list_area);
+            let rows = filter_labels.len().min(inner.height as usize) as u16;
+            for (i, label) in filter_labels.into_iter().take(rows as usize).enumerate() {
+                frame.render_widget(
+                    Paragraph::new(Line::from(label)),
+                    Rect::new(inner.x, inner.y + i as u16, inner.width, 1),
+                );
+            }
+            inner.y += rows;
+            inner.height -= rows;
             if loading {
                 text(frame, inner, "Loading sessions…", 0, true);
             } else if let Some((offset, manual_scroll, list_area, areas)) = viewport {
                 *list_area = inner;
                 *areas = filter_areas;
-                let height = inner.height as usize;
-                if !*manual_scroll && height > 0 {
-                    let margin = 3.min(height.saturating_sub(1) / 2);
-                    if *selection < offset.saturating_add(margin) {
-                        *offset = selection.saturating_sub(margin);
-                    } else if *selection >= offset.saturating_add(height - margin) {
-                        *offset = (selection.saturating_add(margin + 1)).saturating_sub(height);
-                    }
-                }
                 list(
                     frame,
                     inner,
                     &labels,
-                    (*selection, false),
+                    (*selection, !*manual_scroll, 3),
                     offset,
                     !search,
                     false,
@@ -1071,6 +1091,7 @@ fn draw_modal(
             id: _,
             copy: _,
             archived: _,
+            list_offset,
             selection,
             pane,
             offsets,
@@ -1132,8 +1153,8 @@ fn draw_modal(
                 frame,
                 inner,
                 &labels,
-                (*selection, true),
-                &mut 0,
+                (*selection, true, 3),
+                list_offset,
                 *pane == 0,
                 false,
             );
