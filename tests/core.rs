@@ -2118,6 +2118,131 @@ fn empty_diff_clicks_do_not_start_comment_drags() {
 }
 
 #[test]
+fn scrolled_wrapping_padding_preserves_selection_and_comment_clicks() {
+    use crossterm::event::{MouseButton, MouseEvent, MouseEventKind};
+    let dir = tempfile::tempdir().unwrap();
+    for side in [0, 1] {
+        let long = "long wrapped source ".repeat(30);
+        let (old, new) = if side == 0 {
+            ("short", long.as_str())
+        } else {
+            (long.as_str(), "short")
+        };
+        let mut f = file(&format!(
+            "@@ -20,3 +20,3 @@\n first\n-{old}\n+{new}\n last\n"
+        ));
+        f.comments.push(Comment {
+            file: true,
+            text: "existing note".into(),
+            ..Default::default()
+        });
+        let mut app = App::new(
+            Review {
+                files: vec![f],
+                split: true,
+                ..Default::default()
+            },
+            dir.path().join("state.json"),
+        );
+        app.focus(0);
+        app.side = side;
+        app.wrap = true;
+        let mut terminal = Terminal::new(TestBackend::new(100, 12)).unwrap();
+        draw(&mut app, &mut terminal);
+        let padding = (0..app.view().unwrap().len())
+            .find(|&row| {
+                let v = app.view().unwrap();
+                !v.selectable(row, side) && v.display_source(row, 1 - side).is_some()
+            })
+            .unwrap();
+        app.offset = padding - 1;
+        app.manual_scroll[0] = true;
+        app.cursor[0] = (0..app.view().unwrap().len())
+            .find(|&row| app.view().unwrap().source(row, side).is_some())
+            .unwrap();
+        app.anchor = Some((app.cursor[0], side));
+        draw(&mut app, &mut terminal);
+        assert!(app.offset > 0);
+        let selection = (app.cursor[0], app.anchor, app.side);
+        let x = if side == 0 {
+            app.diff_inner.x + 1
+        } else {
+            app.diff_inner.right() - 2
+        };
+        let y = app.diff_inner.y + (padding - app.offset) as u16;
+        for kind in [
+            MouseEventKind::Down(MouseButton::Left),
+            MouseEventKind::Drag(MouseButton::Left),
+            MouseEventKind::Up(MouseButton::Left),
+        ] {
+            app.handle(Event::Mouse(MouseEvent {
+                kind,
+                column: x,
+                row: y,
+                modifiers: M::NONE,
+            }))
+            .unwrap();
+            draw(&mut app, &mut terminal);
+            assert!(app.editor.is_none());
+            assert_eq!((app.cursor[0], app.anchor, app.side), selection);
+        }
+        // The same visual row contains real wrapped source on the opposite side.
+        let x = if side == 1 {
+            app.diff_inner.x + 1
+        } else {
+            app.diff_inner.right() - 2
+        };
+        app.handle(Event::Mouse(MouseEvent {
+            kind: MouseEventKind::Down(MouseButton::Left),
+            column: x,
+            row: y,
+            modifiers: M::NONE,
+        }))
+        .unwrap();
+        assert_eq!(app.cursor[0], padding);
+        assert_eq!(app.side, 1 - side);
+        assert!(app.anchor.is_none());
+        // Inline comments remain clickable and editable despite the new hit-test guard.
+        app.offset = 0;
+        app.manual_scroll[0] = true;
+        draw(&mut app, &mut terminal);
+        let rect = app.diff_inner;
+        app.handle(Event::Mouse(MouseEvent {
+            kind: MouseEventKind::Down(MouseButton::Left),
+            column: rect.right() - 2,
+            row: rect.y,
+            modifiers: M::NONE,
+        }))
+        .unwrap();
+        assert_eq!(app.selected_ref().unwrap().comment, 0);
+        for kind in [
+            MouseEventKind::Up(MouseButton::Left),
+            MouseEventKind::Down(MouseButton::Left),
+        ] {
+            app.handle(Event::Mouse(MouseEvent {
+                kind,
+                column: rect.right() - 2,
+                row: rect.y,
+                modifiers: M::NONE,
+            }))
+            .unwrap();
+            assert!(app.editor.is_none());
+        }
+        app.handle(Event::Mouse(MouseEvent {
+            kind: MouseEventKind::Up(MouseButton::Left),
+            column: rect.right() - 2,
+            row: rect.y,
+            modifiers: M::NONE,
+        }))
+        .unwrap();
+        assert_eq!(
+            app.editor.as_ref().unwrap().input.lines(),
+            &["existing note"]
+        );
+    }
+}
+
+#[test]
 fn diff_drag_opens_comment_on_release_with_selected_range_and_side() {
     use crossterm::event::{MouseButton, MouseEvent, MouseEventKind};
     let dir = tempfile::tempdir().unwrap();
@@ -2190,13 +2315,23 @@ fn diff_drag_opens_comment_on_release_with_selected_range_and_side() {
         assert_eq!(comment.side, if split { ["old", "new"][side] } else { "" });
         app.close_editor();
         draw(&mut app, &mut terminal);
-        // A click without a range selection must not open the editor.
+        // Acquiring pane focus only selects; repeating the click opens on release.
+        app.focus(1);
         let y = app.diff_inner.y + app.cursor[0].saturating_sub(app.offset) as u16;
         app.handle(mouse(MouseEventKind::Down(MouseButton::Left), x, y))
             .unwrap();
         app.handle(mouse(MouseEventKind::Up(MouseButton::Left), x, y))
             .unwrap();
         assert!(app.editor.is_none());
+        app.handle(mouse(MouseEventKind::Down(MouseButton::Left), x, y))
+            .unwrap();
+        assert!(app.editor.is_none());
+        app.handle(mouse(MouseEventKind::Up(MouseButton::Left), x, y))
+            .unwrap();
+        let comment = &app.editor.as_ref().unwrap().comment;
+        let source = app.view().unwrap().source(app.cursor[0], side).unwrap();
+        assert_eq!((comment.start, comment.end), (source, source));
+        app.close_editor();
     }
 }
 

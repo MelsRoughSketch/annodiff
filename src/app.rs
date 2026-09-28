@@ -133,6 +133,7 @@ pub struct App {
     pub expansion_scroll_from: Option<usize>,
     pub anchor: Option<(usize, usize)>,
     drag_start: Option<(usize, usize)>,
+    diff_click: Option<(usize, usize)>,
     divider_drag: Option<(u16, i32)>,
     pane_drag: Option<(u16, i32)>,
     pub queries: [String; 4],
@@ -240,6 +241,7 @@ impl App {
             expansion_scroll_from: None,
             anchor: None,
             drag_start: None,
+            diff_click: None,
             divider_drag: None,
             pane_drag: None,
             queries: Default::default(),
@@ -1467,6 +1469,7 @@ impl App {
         self.expansion_scroll_from = None;
         if matches!(event, Event::Resize(..)) {
             self.pane_drag = None;
+            self.diff_click = None;
         }
         if let Event::Paste(text) = &event {
             if let Some(editor) = &mut self.editor {
@@ -1575,6 +1578,9 @@ impl App {
                 mouse.kind,
                 MouseEventKind::Drag(MouseButton::Left) | MouseEventKind::Up(MouseButton::Left)
             ) {
+                if mouse.kind == MouseEventKind::Drag(MouseButton::Left) {
+                    self.diff_click = None;
+                }
                 if let Some((start, percent)) = self.pane_drag {
                     if self.zoom < 2 && !self.pane_area.is_empty() {
                         let delta = i32::from(position) - i32::from(start);
@@ -1613,16 +1619,23 @@ impl App {
                         self.anchor = Some((start, side));
                     }
                 }
-                if mouse.kind == MouseEventKind::Up(MouseButton::Left)
-                    && self.drag_start.take().is_some()
-                    && self.anchor.is_some()
-                {
-                    self.start_edit(None, false)?;
+                if mouse.kind == MouseEventKind::Up(MouseButton::Left) {
+                    let click = self.diff_click.take();
+                    if self.drag_start.take().is_some() && self.anchor.is_some() {
+                        self.start_edit(None, false)?;
+                    } else if click == Some((self.cursor[0], self.side))
+                        && self.diff_inner.contains((mouse.column, mouse.row).into())
+                        && self.offset + usize::from(mouse.row - self.diff_inner.y)
+                            == self.cursor[0]
+                    {
+                        self.start_edit(self.selected_ref(), false)?;
+                    }
                 }
                 return Ok(Effect::None);
             }
             if mouse.kind == MouseEventKind::Down(MouseButton::Left) {
                 self.drag_start = None;
+                self.diff_click = None;
                 self.divider_drag = None;
                 self.pane_drag = None;
                 let sidebar_size = (i32::from(extent) * self.sidebar_percent / 100) as u16;
@@ -1706,6 +1719,8 @@ impl App {
                                 if !self.view().is_some_and(|v| v.selectable(target, side)) {
                                     return Ok(Effect::None);
                                 }
+                                let activate =
+                                    focused && self.side == side && self.cursor[0] == target;
                                 self.anchor = None;
                                 self.side = side;
                                 self.move_selection(1, Some(target));
@@ -1715,6 +1730,11 @@ impl App {
                                     .is_some()
                                 {
                                     self.drag_start = Some((self.cursor[0], side));
+                                }
+                                if activate
+                                    && (self.drag_start.is_some() || self.selected_ref().is_some())
+                                {
+                                    self.diff_click = Some((target, side));
                                 }
                             } else {
                                 if !self.pane_rects[pane]
@@ -1761,6 +1781,7 @@ impl App {
             return Ok(Effect::None);
         }
         self.drag_start = None;
+        self.diff_click = None;
         self.divider_drag = None;
         self.pane_drag = None;
         if self.editor.is_some() {
