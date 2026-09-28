@@ -306,6 +306,12 @@ fn file_expand_preserves_diff_comments_and_supports_full_file_navigation() {
             );
             assert_eq!(view.source(app.cursor[0], app.side), Some(source));
             assert!(view.rows.iter().any(|row| matches!(row, Row::Gap(true))));
+            for (row, item) in view.rows.iter().enumerate() {
+                if *item == Row::Gap(true) {
+                    assert_eq!(view.rows.get(row.wrapping_sub(1)), Some(&Row::Gap(false)));
+                    assert_eq!(view.rows.get(row + 1), Some(&Row::Gap(false)));
+                }
+            }
             assert_eq!(app.selected_ref().unwrap().comment, 0);
         }
         let visibility = app.view().unwrap().context_visible.clone();

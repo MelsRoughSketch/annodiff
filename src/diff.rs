@@ -239,7 +239,7 @@ impl FileView {
             for row in self.rows.drain(..) {
                 if matches!(row, Row::Code(pair) if !pair.iter().flatten().any(|i| visible[*i])) {
                     if !matches!(rows.last(), Some(Row::Gap(_))) {
-                        rows.push(Row::Gap(true));
+                        rows.extend([Row::Gap(false), Row::Gap(true), Row::Gap(false)]);
                     }
                 } else {
                     rows.push(row);
