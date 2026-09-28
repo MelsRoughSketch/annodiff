@@ -158,7 +158,7 @@ const EXPANSION_SCROLL_TIME: Duration = Duration::from_millis(180);
 
 fn scroll_offset(from: usize, to: usize, elapsed: Duration) -> usize {
     let progress = (elapsed.as_secs_f64() / EXPANSION_SCROLL_TIME.as_secs_f64()).min(1.0);
-    let eased = 1.0 - (1.0 - progress).powi(2);
+    let eased = progress * progress * (3.0 - 2.0 * progress); // Smoothstep: ease in and out.
     (from as f64 + (to as f64 - from as f64) * eased).round() as usize
 }
 
@@ -272,6 +272,12 @@ fn run(mut app: App) -> Result<()> {
 
 #[test]
 fn expansion_scroll_is_bounded_monotonic_and_finishes_on_time() {
+    let positions =
+        [0, 45, 90, 135, 180].map(|ms| scroll_offset(0, 100, Duration::from_millis(ms)));
+    assert_eq!(positions[2], 50);
+    assert!(positions[1] - positions[0] < positions[2] - positions[1]);
+    assert!(positions[4] - positions[3] < positions[3] - positions[2]);
+    assert_eq!(positions[1], 100 - positions[3]);
     for (from, to) in [(0, 30), (30, 0), (12, 12)] {
         let mut previous = from;
         for ms in 0..=200 {
