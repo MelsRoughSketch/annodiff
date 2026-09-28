@@ -114,6 +114,7 @@ fn live_session_listing() {
     let root = std::env::current_dir().unwrap();
     let sessions = agent::sessions(
         root.to_str().unwrap(),
+        agent::SessionOptions::default(),
         std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
     )
     .unwrap();

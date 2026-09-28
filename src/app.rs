@@ -73,18 +73,23 @@ pub enum Modal {
     Loading {
         cancel: Arc<AtomicBool>,
         receiver: Receiver<Result<Vec<agent::Session>>>,
+        options: agent::SessionOptions,
+        input: TextArea<'static>,
+        control: usize,
     },
     Sessions {
         items: Vec<agent::Session>,
         input: TextArea<'static>,
         selection: usize,
         search: bool,
-        current_only: bool,
+        options: agent::SessionOptions,
+        control: usize,
     },
     Preview {
         destination: String,
         id: String,
         copy: bool,
+        archived: bool,
         selection: usize,
         pane: usize,
         offsets: [usize; 2],
@@ -94,7 +99,7 @@ pub enum Effect {
     None,
     Quit,
     Editor,
-    Send(String),
+    Send { id: String, archived: bool },
     Clipboard(String),
 }
 
@@ -1195,6 +1200,15 @@ impl App {
     pub fn start_sessions(&mut self) -> Result<()> {
         ensure!(self.review.pending() > 0, "no unsent Open comments to send");
         self.fresh()?;
+        self.load_sessions(agent::SessionOptions::default(), TextArea::default(), 0);
+        Ok(())
+    }
+    fn load_sessions(
+        &mut self,
+        options: agent::SessionOptions,
+        input: TextArea<'static>,
+        control: usize,
+    ) {
         self.close_modal();
         if let Some(worker) = self.session_worker.take() {
             let _ = worker.join();
@@ -1204,10 +1218,15 @@ impl App {
         let worker_cancel = cancel.clone();
         let (tx, receiver) = mpsc::channel();
         self.session_worker = Some(thread::spawn(move || {
-            let _ = tx.send(agent::sessions(&root, worker_cancel));
+            let _ = tx.send(agent::sessions(&root, options, worker_cancel));
         }));
-        self.modal = Some(Modal::Loading { cancel, receiver });
-        Ok(())
+        self.modal = Some(Modal::Loading {
+            cancel,
+            receiver,
+            options,
+            input,
+            control,
+        });
     }
     pub fn poll(&mut self) -> bool {
         let result = if let Some(Modal::Loading { receiver, .. }) = &self.modal {
@@ -1222,12 +1241,22 @@ impl App {
                 );
                 Vec::new()
             });
+            let Some(Modal::Loading {
+                options,
+                input,
+                control,
+                ..
+            }) = self.modal.take()
+            else {
+                return false;
+            };
             self.modal = Some(Modal::Sessions {
                 items,
-                input: TextArea::default(),
+                input,
                 selection: 0,
                 search: false,
-                current_only: true,
+                options,
+                control,
             });
             true
         } else {
@@ -1739,6 +1768,7 @@ impl App {
                         destination: "Clipboard".into(),
                         id: String::new(),
                         copy: true,
+                        archived: false,
                         selection: 0,
                         pane: 0,
                         offsets: [0; 2],
@@ -1809,7 +1839,8 @@ impl App {
                 input,
                 selection,
                 search,
-                current_only,
+                options,
+                control,
             } => {
                 if key.code == K::Esc {
                     return Ok(Effect::None);
@@ -1818,13 +1849,29 @@ impl App {
                     && key.modifiers.is_empty()
                     && matches!(key.code, K::Char('a' | 'h' | 'l') | K::Left | K::Right)
                 {
-                    *current_only = !*current_only;
+                    let target = if key.code == K::Char('a') {
+                        0
+                    } else {
+                        *control
+                    };
+                    match target {
+                        0 => options.all = !options.all,
+                        1 => {
+                            options.archived = !options.archived;
+                            self.load_sessions(*options, std::mem::take(input), *control);
+                            return Ok(Effect::None);
+                        }
+                        _ => {
+                            options.created = !options.created;
+                            options.sort(items);
+                        }
+                    }
                     *selection = 0;
                 }
                 let query = input.lines().join(" ").to_lowercase();
                 let filtered: Vec<_> = items
                     .iter()
-                    .filter(|s| s.matches(*current_only, &query))
+                    .filter(|s| s.matches(!options.all, &query))
                     .collect();
                 if key.code == K::Enter || save_key(key) {
                     let copy = *selection == 1;
@@ -1841,7 +1888,17 @@ impl App {
                         filtered
                             .get(*selection - 2)
                             .map_or("New session".into(), |s| {
-                                format!("{}\nSession: {}\nDirectory: {}", s.title(), s.id, s.cwd)
+                                format!(
+                                    "{}\nSession: {}\nDirectory: {}{}",
+                                    s.title(),
+                                    s.id,
+                                    s.cwd,
+                                    if options.archived {
+                                        "\nArchived session: restored when you confirm sending"
+                                    } else {
+                                        ""
+                                    }
+                                )
                             })
                     } else {
                         "New session".into()
@@ -1850,14 +1907,19 @@ impl App {
                         destination,
                         id,
                         copy,
+                        archived: options.archived && *selection > 1,
                         selection: 0,
                         pane: 0,
                         offsets: [0; 2],
                     });
                     return Ok(Effect::None);
                 }
-                if key.code == K::Tab {
-                    *search = !*search;
+                if key.code == K::Tab || key.code == K::BackTab {
+                    if *search {
+                        *search = false;
+                    } else {
+                        *control = (*control + if key.code == K::BackTab { 2 } else { 1 }) % 3;
+                    }
                 } else if *search {
                     input.input(key);
                     *selection = 0;
@@ -1876,6 +1938,7 @@ impl App {
                 destination: _,
                 id,
                 copy,
+                archived,
                 selection,
                 pane,
                 offsets,
@@ -1889,7 +1952,10 @@ impl App {
                     return Ok(if *copy {
                         Effect::Clipboard(self.prompt())
                     } else {
-                        Effect::Send(id.clone())
+                        Effect::Send {
+                            id: id.clone(),
+                            archived: *archived,
+                        }
                     });
                 }
                 if key.code == K::Tab {

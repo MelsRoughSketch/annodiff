@@ -15,6 +15,24 @@ use std::{
     time::{Duration, Instant},
 };
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct SessionOptions {
+    pub all: bool,
+    pub archived: bool,
+    pub created: bool,
+}
+impl SessionOptions {
+    pub fn sort(&self, items: &mut [Session]) {
+        items.sort_by_key(|s| {
+            std::cmp::Reverse(if self.created {
+                s.created_at
+            } else {
+                s.updated_at
+            })
+        });
+    }
+}
+
 #[derive(Clone, Debug, Default, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct Session {
@@ -23,6 +41,7 @@ pub struct Session {
     pub preview: String,
     pub cwd: String,
     pub updated_at: i64,
+    pub created_at: i64,
     /// Computed once for the directory used to list sessions, never trusted from RPC.
     #[serde(skip)]
     pub current: bool,
@@ -193,12 +212,33 @@ fn session_directories(root: &Path) -> HashSet<PathBuf> {
     directories
 }
 
-pub fn sessions(root: &str, cancel: Arc<AtomicBool>) -> Result<Vec<Session>> {
+pub fn sessions(
+    root: &str,
+    options: SessionOptions,
+    cancel: Arc<AtomicBool>,
+) -> Result<Vec<Session>> {
     let mut rpc = RpcProcess::start(root, cancel)?;
+    let config = rpc.call("config/read", json!({"includeLayers":false}))?;
+    let provider = config["config"]["model_provider"]
+        .as_str()
+        .unwrap_or("openai");
+    let worktrees = config["config"]["features"]["worktrees"]
+        .as_bool()
+        .unwrap_or(true);
     let mut sessions = Vec::new();
     let mut cursor = Value::Null;
     loop {
-        let result=rpc.call("thread/list",json!({"limit":100,"sortKey":"updated_at","sourceKinds":["cli","vscode","exec","appServer"],"cursor":cursor}))?;
+        let result = rpc.call(
+            "thread/list",
+            json!({
+                "limit": 100,
+                "sortKey": if options.created { "created_at" } else { "updated_at" },
+                "sourceKinds": ["cli", "vscode"],
+                "modelProviders": [provider],
+                "archived": options.archived,
+                "cursor": cursor,
+            }),
+        )?;
         sessions.extend(
             serde_json::from_value::<Vec<Session>>(result["data"].clone())
                 .context("decode Codex thread/list sessions")?,
@@ -210,17 +250,22 @@ pub fn sessions(root: &str, cancel: Arc<AtomicBool>) -> Result<Vec<Session>> {
         ensure!(next != cursor, "Codex returned a repeated cursor");
         cursor = next;
     }
-    let directories = session_directories(Path::new(root));
+    let directories = if worktrees {
+        session_directories(Path::new(root))
+    } else {
+        HashSet::from([normalized_path(Path::new(root))])
+    };
     for session in &mut sessions {
         session.current = !session.cwd.is_empty()
             && directories.contains(&normalized_path(Path::new(&session.cwd)));
     }
-    sessions.sort_by(|a, b| {
-        b.current
-            .cmp(&a.current)
-            .then_with(|| b.updated_at.cmp(&a.updated_at))
-    });
+    options.sort(&mut sessions);
     Ok(sessions)
+}
+pub fn unarchive_session(root: &str, id: &str) -> Result<()> {
+    let mut rpc = RpcProcess::start(root, Arc::new(AtomicBool::new(false)))?;
+    rpc.call("thread/unarchive", json!({"threadId":id}))?;
+    Ok(())
 }
 pub fn codex_home() -> Result<PathBuf> {
     if let Some(home) = std::env::var_os("CODEX_HOME").filter(|s| !s.is_empty()) {

@@ -1041,7 +1041,8 @@ fn quit_from_session_picker_and_preview_but_type_q_in_search() {
         input: Default::default(),
         selection: 0,
         search: true,
-        current_only: true,
+        options: Default::default(),
+        control: 0,
     });
     assert!(matches!(press(&mut app, K::Char('q')), Effect::None));
     assert!(matches!(&app.modal, Some(Modal::Sessions { input, .. }) if input.lines() == ["q"]));
@@ -1052,6 +1053,7 @@ fn quit_from_session_picker_and_preview_but_type_q_in_search() {
             destination: "New session".into(),
             id: String::new(),
             copy: false,
+            archived: false,
             selection: 0,
             pane,
             offsets: [0; 2],
@@ -1063,6 +1065,9 @@ fn quit_from_session_picker_and_preview_but_type_q_in_search() {
     app.modal = Some(Modal::Loading {
         cancel: cancel.clone(),
         receiver,
+        options: Default::default(),
+        input: Default::default(),
+        control: 0,
     });
     assert!(matches!(press(&mut app, K::Char('q')), Effect::Quit));
     assert!(cancel.load(std::sync::atomic::Ordering::Relaxed));
@@ -1112,7 +1117,8 @@ fn session_directory_scope_combines_with_search_and_selects_visible_session() {
         input: ratatui_textarea::TextArea::new(vec!["fix".into()]),
         selection: 2,
         search: false,
-        current_only: true,
+        options: Default::default(),
+        control: 0,
     });
     let mut terminal = Terminal::new(TestBackend::new(120, 30)).unwrap();
     draw(&mut app, &mut terminal);
@@ -1124,29 +1130,29 @@ fn session_directory_scope_combines_with_search_and_selects_visible_session() {
             .map(|c| c.symbol())
             .collect::<String>()
     };
-    assert!(screen(&terminal).contains("[PWD] / All"));
+    assert!(screen(&terminal).contains("[CWD] / All"));
     assert!(screen(&terminal).contains("2 sessions"));
     assert!(screen(&terminal).contains("[here] Fix linked"));
     assert!(!screen(&terminal).contains("Fix elsewhere"));
     press(&mut app, K::Char('a'));
     assert!(
-        matches!(&app.modal, Some(Modal::Sessions { current_only: false, selection: 0, input, .. }) if input.lines() == ["fix"])
+        matches!(&app.modal, Some(Modal::Sessions { options: annodiff::agent::SessionOptions { all: true, .. }, selection: 0, input, .. }) if input.lines() == ["fix"])
     );
     draw(&mut app, &mut terminal);
-    assert!(screen(&terminal).contains("PWD / [All]"));
+    assert!(screen(&terminal).contains("CWD / [All]"));
     assert!(screen(&terminal).contains("Fix elsewhere"));
     for key in [K::Char('h'), K::Char('l'), K::Left, K::Right, K::Char('a')] {
         for expected in [true, false] {
             press(&mut app, key);
             assert!(
-                matches!(&app.modal, Some(Modal::Sessions { current_only, selection: 0, input, .. }) if *current_only == expected && input.lines() == ["fix"])
+                matches!(&app.modal, Some(Modal::Sessions { options, selection: 0, input, .. }) if !options.all == expected && input.lines() == ["fix"])
             );
         }
     }
-    press(&mut app, K::Tab);
+    press(&mut app, K::Char('/'));
     press(&mut app, K::Char('a'));
     assert!(
-        matches!(&app.modal, Some(Modal::Sessions { current_only: false, input, .. }) if input.lines()[0].contains('a'))
+        matches!(&app.modal, Some(Modal::Sessions { options: annodiff::agent::SessionOptions { all: true, .. }, input, .. }) if input.lines()[0].contains('a'))
     );
     if let Some(Modal::Sessions { input, .. }) = &mut app.modal {
         *input = ratatui_textarea::TextArea::new(vec!["elsewhere".into()]);
@@ -2388,6 +2394,7 @@ fn wrapped_comment_tail_is_visible_in_inspection_and_send_preview() {
                 destination: "Clipboard".into(),
                 id: String::new(),
                 copy: true,
+                archived: false,
                 selection: 0,
                 pane: 1,
                 offsets: [0; 2],
@@ -2679,6 +2686,7 @@ fn historical_comment_preview_preserves_archive_and_legacy_state() {
         destination: "Clipboard".into(),
         id: String::new(),
         copy: true,
+        archived: false,
         selection: 0,
         pane: 0,
         offsets: [0; 2],
@@ -2707,5 +2715,99 @@ fn historical_comment_preview_preserves_archive_and_legacy_state() {
     assert_eq!(
         serde_json::from_str::<Review>(&encoded).unwrap().pending(),
         0
+    );
+}
+
+#[test]
+fn session_picker_sort_and_archived_reload_preserve_filters() {
+    use annodiff::agent::{Session, SessionOptions};
+    let dir = tempfile::tempdir().unwrap();
+    let mut items = vec![
+        Session {
+            id: "local".into(),
+            current: true,
+            preview: "Find local".into(),
+            updated_at: 10,
+            created_at: 30,
+            ..Default::default()
+        },
+        Session {
+            id: "remote".into(),
+            preview: "Find remote".into(),
+            updated_at: 20,
+            created_at: 5,
+            ..Default::default()
+        },
+    ];
+    let mut options = SessionOptions {
+        all: true,
+        ..Default::default()
+    };
+    options.sort(&mut items);
+    assert_eq!(items[0].id, "remote"); // All does not prioritize local sessions.
+    let mut app = App::new(Review::default(), dir.path().join("state.json"));
+    app.modal = Some(Modal::Sessions {
+        items,
+        input: ratatui_textarea::TextArea::new(vec!["find".into()]),
+        selection: 3,
+        search: false,
+        options,
+        control: 0,
+    });
+    press(&mut app, K::Tab);
+    press(&mut app, K::Tab);
+    press(&mut app, K::Right);
+    let Some(Modal::Sessions {
+        items,
+        options: selected,
+        input,
+        selection,
+        ..
+    }) = &app.modal
+    else {
+        panic!()
+    };
+    assert!(selected.all && selected.created && !selected.archived);
+    assert_eq!(items[0].id, "local");
+    assert_eq!(*selection, 0);
+    assert_eq!(input.lines(), ["find"]);
+    // Loading Archived keeps scope, sort, query and focused control.
+    options.created = true;
+    options.archived = true;
+    let (tx, receiver) = std::sync::mpsc::channel();
+    tx.send(Ok(vec![Session {
+        id: "archived".into(),
+        preview: "Find archived".into(),
+        ..Default::default()
+    }]))
+    .unwrap();
+    app.modal = Some(Modal::Loading {
+        cancel: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+        receiver,
+        options,
+        input: ratatui_textarea::TextArea::new(vec!["find".into()]),
+        control: 1,
+    });
+    assert!(app.poll());
+    assert!(
+        matches!(&app.modal, Some(Modal::Sessions { options: loaded, input, control: 1, selection: 0, .. }) if *loaded == options && input.lines() == ["find"])
+    );
+    let mut terminal = Terminal::new(TestBackend::new(120, 30)).unwrap();
+    draw(&mut app, &mut terminal);
+    let screen: String = terminal
+        .backend()
+        .buffer()
+        .content
+        .iter()
+        .map(|c| c.symbol())
+        .collect();
+    for label in ["CWD / [All]", "Active / [Archived]", "Updated / [Created]"] {
+        assert!(screen.contains(label));
+    }
+    press(&mut app, K::Down);
+    press(&mut app, K::Down);
+    press(&mut app, K::Enter);
+    assert!(
+        matches!(&app.modal, Some(Modal::Preview { id, archived: true, destination, .. }) if id == "archived" && destination.contains("restored when you confirm sending"))
     );
 }

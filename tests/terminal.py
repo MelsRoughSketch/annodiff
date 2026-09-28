@@ -37,7 +37,33 @@ if sys.argv[1:] == ["app-server"]:
         request = json.loads(line)
         if "id" not in request:
             continue
-        result = {} if request["method"] == "initialize" else {"data": [{"id": "unnamed", "name": None, "preview": "Unnamed session preview", "cwd": os.getcwd(), "updatedAt": 1}], "nextCursor": None}
+        method = request["method"]
+        with open(os.environ["FAKE_RPC_LOG"], "a") as log:
+            log.write(json.dumps(request) + "\n")
+        result = {}
+        if method == "config/read":
+            result = {"config": {"model_provider": "test-provider", "features": {"worktrees": True}}}
+        elif method == "thread/list":
+            params = request["params"]
+            assert params["sourceKinds"] == ["cli", "vscode"], params
+            assert params["modelProviders"] == ["test-provider"], params
+            assert isinstance(params["archived"], bool), params
+            def row(id, source="cli", provider="test-provider", archived=False, cwd=None, updated=20, created=10):
+                return dict(id=id, name=None, preview="ARCHIVED_FIXTURE" if archived else "Unnamed session preview " + id,
+                            cwd=cwd or os.getcwd(), updatedAt=updated, createdAt=created,
+                            source=source, modelProvider=provider, archived=archived)
+            rows = [row("unnamed"), row("second", source="vscode", updated=10, created=30),
+                    row("elsewhere", cwd="/other-project", updated=40, created=40),
+                    row("archived", archived=True), row("other-provider", provider="other")]
+            rows += [row("exec-" + str(i), source="exec") for i in range(30)]
+            rows = [r for r in rows if r["source"] in params["sourceKinds"]
+                    and r["modelProvider"] in params["modelProviders"] and r["archived"] == params["archived"]]
+            rows.sort(key=lambda r: r["createdAt" if params["sortKey"] == "created_at" else "updatedAt"], reverse=True)
+            offset = int(params.get("cursor") or 0)
+            result = {"data": rows[offset:offset+2], "nextCursor": str(offset+2) if offset+2 < len(rows) else None}
+        elif method == "thread/unarchive":
+            assert request["params"]["threadId"] == "archived"
+            pathlib.Path(os.environ["FAKE_PAYLOAD"]).with_suffix(".unarchive").write_text("restored")
         print(json.dumps({"id": request["id"], "result": result}), flush=True)
 else:
     prompt = sys.argv[-1]
@@ -73,6 +99,7 @@ print("fake-editor-finished", flush=True)
         env = dict(os.environ, TERM="xterm-256color", PATH=str(tools) + os.pathsep + os.environ["PATH"],
                    VISUAL=str(editor), CODEX_HOME=str(directory / "codex-home"),
                    XDG_CONFIG_HOME=str(config.parent), FAKE_PAYLOAD=str(payload), FAKE_FAIL=str(failure),
+                   FAKE_RPC_LOG=str(directory / f"rpc{case}.jsonl"),
                    GIT_CONFIG_GLOBAL="/dev/null", GIT_CONFIG_SYSTEM="/dev/null")
         subprocess.run(["git", "init", "-q", str(root)], env=env, check=True)
         (root / "sample.go").write_text('package main\nfunc main() {}\n')
@@ -278,6 +305,27 @@ print("fake-editor-finished", flush=True)
                              if c["Text"] == "follow-up-e2e")
             assert bool(follow_up.get("Sent")) == (failure == 0)
             if case == 0:
+                send("1c")
+                send("archived-destination-e2e")
+                send(save_key)
+                wait_state(lambda saved: any(c["Text"] == "archived-destination-e2e"
+                           for f in saved["Files"] for c in f["Comments"]))
+                start = len(output)
+                send(save_key)
+                wait_for(lambda: b"Destination" in output[start:])
+                send("\t\x1b[C")  # Active -> Archived.
+                wait_for(lambda: b"ARCHIVED_FIXTURE" in output[start:])
+                send("\t\x1b[C")  # Updated -> Created; keep archived selection.
+                send("\x1b[B\x1b[B\r")
+                wait_for(lambda: b"Comments to send" in output[start:])
+                assert not payload.with_suffix(".unarchive").exists()
+                payload.unlink()
+                send("\r")
+                wait_for(payload.exists)
+                wait_state(lambda saved: any(c["Text"] == "archived-destination-e2e" and c.get("Sent")
+                           for f in saved["Files"] for c in f["Comments"]))
+                assert payload.with_suffix(".unarchive").read_text() == "restored"
+                assert "archived-destination-e2e" in payload.read_text()
                 check_navigation()
             send("q")
             process.wait(timeout=5)

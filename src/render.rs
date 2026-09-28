@@ -309,10 +309,10 @@ pub fn draw(app: &mut App, frame: &mut Frame) {
             Some(Modal::Search { .. }) => "Type to search/filter · Enter: keep · Esc: cancel",
             Some(Modal::Confirm { .. }) => "←→/Tab: choose · Enter: confirm · Esc: cancel",
             Some(Modal::Sessions { search: true, .. }) => {
-                "Type to search · Tab: session list · Enter/Ctrl+Enter/F2: preview · Esc: cancel"
+                "Type to search · Tab: filters · Enter/Ctrl+Enter/F2: preview · Esc: cancel"
             }
             Some(Modal::Sessions { .. }) => {
-                "q: quit · h/l/←→/a: PWD/All · ↑↓/jk: session · Tab: search · Enter/Ctrl+Enter/F2: preview · Esc: cancel"
+                "q: quit · Tab: filter · ←→: change · ↑↓: session · /: search · Enter: preview · Esc: cancel"
             }
             Some(Modal::Preview { .. }) => {
                 "q: quit · ↑↓/PgUp/PgDn: scroll · Tab: pane · Enter/Ctrl+Enter/F2: send/copy · Esc: cancel"
@@ -938,7 +938,8 @@ fn draw_modal(
             input,
             selection,
             search,
-            current_only,
+            options,
+            control,
         } => {
             frame.render_widget(Clear, area);
             let query = input.lines().join(" ").to_lowercase();
@@ -949,7 +950,7 @@ fn draw_modal(
             labels.extend(
                 items
                     .iter()
-                    .filter(|s| s.matches(*current_only, &query))
+                    .filter(|s| s.matches(!options.all, &query))
                     .map(|s| {
                         format!(
                             "{}{} · {}",
@@ -973,11 +974,24 @@ fn draw_modal(
                 frame,
                 list_area,
                 format!(
-                    " Destination · {} · h/l/←→/a: PWD/All · {} sessions · Enter: preview ",
-                    if *current_only {
-                        "[PWD] / All"
+                    " Destination · {}{} · {}{} · {}{} · {} sessions ",
+                    if *control == 0 { ">" } else { "" },
+                    if options.all {
+                        "CWD / [All]"
                     } else {
-                        "PWD / [All]"
+                        "[CWD] / All"
+                    },
+                    if *control == 1 { ">" } else { "" },
+                    if options.archived {
+                        "Active / [Archived]"
+                    } else {
+                        "[Active] / Archived"
+                    },
+                    if *control == 2 { ">" } else { "" },
+                    if options.created {
+                        "Updated / [Created]"
+                    } else {
+                        "[Updated] / Created"
                     },
                     labels.len().saturating_sub(2)
                 ),
@@ -997,6 +1011,7 @@ fn draw_modal(
             destination,
             id: _,
             copy: _,
+            archived: _,
             selection,
             pane,
             offsets,
