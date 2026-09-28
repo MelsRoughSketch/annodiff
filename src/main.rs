@@ -80,7 +80,7 @@ fn send(
 ) -> Result<()> {
     app.fresh()?;
     if archived {
-        agent::unarchive_session(&app.review.root, id)?;
+        agent::unarchive_session(&app.session_cwd, id)?;
     }
     let queued = !id.is_empty() && agent::session_loaded(id)?;
     let mut prompt = app.prompt();
@@ -109,7 +109,7 @@ fn send(
             |path| format!("review retained at {}", path.display()),
         )
     };
-    let mut command = agent::command(&app.review.root, id, &prompt, queued);
+    let mut command = agent::command(&app.session_cwd, id, &prompt, queued);
     let deliver = if queued {
         command.output().context("queue review").and_then(|out| {
             ensure!(

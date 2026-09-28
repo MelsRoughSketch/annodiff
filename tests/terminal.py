@@ -48,6 +48,15 @@ if sys.argv[1:] == ["app-server"]:
             assert params["sourceKinds"] == ["cli", "vscode"], params
             assert params["modelProviders"] == ["test-provider"], params
             assert isinstance(params["archived"], bool), params
+            assert os.getcwd() == os.environ["FAKE_CWD"], os.getcwd()
+            assert params["cwd"] in (None, [os.getcwd()]), params
+            db_only = params["useStateDbOnly"]
+            mode = os.environ["FAKE_DB_MODE"]
+            if mode == "ready":
+                assert db_only, "must not scan rollouts when DB has results"
+            if db_only and mode == "error":
+                print(json.dumps({"id": request["id"], "error": {"message": "DB unavailable"}}), flush=True)
+                continue
             def row(id, source="cli", provider="test-provider", archived=False, cwd=None, updated=20, created=10):
                 return dict(id=id, name=None, preview="ARCHIVED_FIXTURE" if archived else "Unnamed session preview " + id,
                             cwd=cwd or os.getcwd(), updatedAt=updated, createdAt=created,
@@ -55,9 +64,14 @@ if sys.argv[1:] == ["app-server"]:
             rows = [row("unnamed"), row("second", source="vscode", updated=10, created=30),
                     row("elsewhere", cwd="/other-project", updated=40, created=40),
                     row("archived", archived=True), row("other-provider", provider="other")]
+            rows += [row("root-" + str(i), cwd=str(pathlib.Path(os.getcwd()).parent)) for i in range(30)]
             rows += [row("exec-" + str(i), source="exec") for i in range(30)]
             rows = [r for r in rows if r["source"] in params["sourceKinds"]
                     and r["modelProvider"] in params["modelProviders"] and r["archived"] == params["archived"]]
+            if params["cwd"] is not None:
+                rows = [r for r in rows if r["cwd"] in params["cwd"]]
+            if db_only and mode == "empty":
+                rows = []
             rows.sort(key=lambda r: r["createdAt" if params["sortKey"] == "created_at" else "updatedAt"], reverse=True)
             offset = int(params.get("cursor") or 0)
             result = {"data": rows[offset:offset+2], "nextCursor": str(offset+2) if offset+2 < len(rows) else None}
@@ -66,6 +80,7 @@ if sys.argv[1:] == ["app-server"]:
             pathlib.Path(os.environ["FAKE_PAYLOAD"]).with_suffix(".unarchive").write_text("restored")
         print(json.dumps({"id": request["id"], "result": result}), flush=True)
 else:
+    assert os.getcwd() == os.environ["FAKE_CWD"], os.getcwd()
     prompt = sys.argv[-1]
     match = re.search(r'Read the review in (".*?") and address', prompt)
     payload = pathlib.Path(os.environ["FAKE_PAYLOAD"])
@@ -95,11 +110,14 @@ print("fake-editor-finished", flush=True)
     for case, (failure, save_key, size) in enumerate(cases):
         root = directory / f"repo{case}"
         root.mkdir()
+        launch = root / "subdirectory"
+        launch.mkdir()
         payload = directory / f"payload{case}.md"
         env = dict(os.environ, TERM="xterm-256color", PATH=str(tools) + os.pathsep + os.environ["PATH"],
                    VISUAL=str(editor), CODEX_HOME=str(directory / "codex-home"),
                    XDG_CONFIG_HOME=str(config.parent), FAKE_PAYLOAD=str(payload), FAKE_FAIL=str(failure),
-                   FAKE_RPC_LOG=str(directory / f"rpc{case}.jsonl"),
+                   FAKE_RPC_LOG=str(directory / f"rpc{case}.jsonl"), FAKE_CWD=str(launch),
+                   FAKE_DB_MODE="empty" if case == 1 else "error" if case == 2 else "ready",
                    GIT_CONFIG_GLOBAL="/dev/null", GIT_CONFIG_SYSTEM="/dev/null")
         subprocess.run(["git", "init", "-q", str(root)], env=env, check=True)
         (root / "sample.go").write_text('package main\nfunc main() {}\n')
@@ -113,7 +131,7 @@ print("fake-editor-finished", flush=True)
         master, slave = pty.openpty()
         fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack("HHHH", 30, 120, 0, 0))
         original = termios.tcgetattr(slave)
-        process = subprocess.Popen([str(binary), str(root)], stdin=slave, stdout=slave, stderr=slave,
+        process = subprocess.Popen([str(binary)], cwd=launch, stdin=slave, stdout=slave, stderr=slave,
                                    env=env, start_new_session=True, preexec_fn=attach_terminal)
         output = bytearray()
 
@@ -253,6 +271,18 @@ print("fake-editor-finished", flush=True)
             send(save_key)  # Destination selection, not delivery.
             wait_for(lambda: b"Destination" in output)
             assert not payload.exists()
+            requests = [json.loads(line) for line in Path(env["FAKE_RPC_LOG"]).read_text().splitlines()]
+            listings = [r["params"] for r in requests if r["method"] == "thread/list"]
+            assert listings[0]["useStateDbOnly"] is True
+            assert all(p["cwd"] == [str(launch)] for p in listings)
+            assert len(listings) == (2 if case in (1, 2) else 1), listings
+            if case == 0:
+                start = len(output)
+                send("a")
+                wait_for(lambda: b"elsewhere" in output[start:], "All loads other directories")
+                start = len(output)
+                send("a")
+                wait_for(lambda: b"Destination" in output[start:], "CWD reload")
             send("\r")  # Preview.
             wait_for(lambda: b"Comments to send" in output)
             assert not payload.exists()

@@ -105,6 +105,7 @@ pub enum Effect {
 
 pub struct App {
     pub review: Review,
+    pub session_cwd: String,
     pub state: PathBuf,
     pub language: String,
     pub file: Option<usize>,
@@ -196,6 +197,7 @@ impl App {
             next
         };
         let mut app = Self::new(review, state);
+        app.session_cwd = fs::canonicalize(dir)?.to_string_lossy().into_owned();
         app._state_lock = Some(state_lock);
         app.language = review::response_language()?;
         app.commits = review::commits(&app.review.root)?;
@@ -206,6 +208,7 @@ impl App {
     pub fn new(review: Review, state: PathBuf) -> Self {
         let file = (!review.files.is_empty()).then_some(0);
         let mut app = Self {
+            session_cwd: review.root.clone(),
             review,
             state,
             language: String::new(),
@@ -1213,7 +1216,7 @@ impl App {
         if let Some(worker) = self.session_worker.take() {
             let _ = worker.join();
         }
-        let root = self.review.root.clone();
+        let root = self.session_cwd.clone();
         let cancel = Arc::new(AtomicBool::new(false));
         let worker_cancel = cancel.clone();
         let (tx, receiver) = mpsc::channel();
@@ -1855,9 +1858,12 @@ impl App {
                         *control
                     };
                     match target {
-                        0 => options.all = !options.all,
-                        1 => {
-                            options.archived = !options.archived;
+                        0 | 1 => {
+                            if target == 0 {
+                                options.all = !options.all;
+                            } else {
+                                options.archived = !options.archived;
+                            }
                             self.load_sessions(*options, std::mem::take(input), *control);
                             return Ok(Effect::None);
                         }

@@ -1134,21 +1134,31 @@ fn session_directory_scope_combines_with_search_and_selects_visible_session() {
     assert!(screen(&terminal).contains("2 sessions"));
     assert!(screen(&terminal).contains("[here] Fix linked"));
     assert!(!screen(&terminal).contains("Fix elsewhere"));
+    // Switching scope now reloads the server-side filtered list.
+    let Some(Modal::Sessions { items, .. }) = &app.modal else {
+        panic!()
+    };
+    let items = items.clone();
     press(&mut app, K::Char('a'));
     assert!(
-        matches!(&app.modal, Some(Modal::Sessions { options: annodiff::agent::SessionOptions { all: true, .. }, selection: 0, input, .. }) if input.lines() == ["fix"])
+        matches!(&app.modal, Some(Modal::Loading { options, input, control: 0, .. })
+        if options.all && input.lines() == ["fix"])
     );
+    app.close_modal();
+    app.modal = Some(Modal::Sessions {
+        items,
+        input: ratatui_textarea::TextArea::new(vec!["fix".into()]),
+        selection: 0,
+        search: false,
+        options: annodiff::agent::SessionOptions {
+            all: true,
+            ..Default::default()
+        },
+        control: 0,
+    });
     draw(&mut app, &mut terminal);
     assert!(screen(&terminal).contains("CWD / [All]"));
     assert!(screen(&terminal).contains("Fix elsewhere"));
-    for key in [K::Char('h'), K::Char('l'), K::Left, K::Right, K::Char('a')] {
-        for expected in [true, false] {
-            press(&mut app, key);
-            assert!(
-                matches!(&app.modal, Some(Modal::Sessions { options, selection: 0, input, .. }) if !options.all == expected && input.lines() == ["fix"])
-            );
-        }
-    }
     press(&mut app, K::Char('/'));
     press(&mut app, K::Char('a'));
     assert!(

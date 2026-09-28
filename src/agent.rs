@@ -225,8 +225,19 @@ pub fn sessions(
     let worktrees = config["config"]["features"]["worktrees"]
         .as_bool()
         .unwrap_or(true);
+    let directories = if worktrees {
+        session_directories(Path::new(root))
+    } else {
+        HashSet::from([normalized_path(Path::new(root))])
+    };
+    let cwd = if options.all {
+        Value::Null
+    } else {
+        json!(directories)
+    };
     let mut sessions = Vec::new();
     let mut cursor = Value::Null;
+    let mut db_only = true;
     loop {
         let result = rpc.call(
             "thread/list",
@@ -236,9 +247,24 @@ pub fn sessions(
                 "sourceKinds": ["cli", "vscode"],
                 "modelProviders": [provider],
                 "archived": options.archived,
+                "cwd": cwd,
+                "useStateDbOnly": db_only,
                 "cursor": cursor,
             }),
-        )?;
+        );
+        // Match resume: repair rollouts only if the initial DB result is unusable.
+        // An empty later page must not restart a scan or change the list's source.
+        if db_only
+            && sessions.is_empty()
+            && result
+                .as_ref()
+                .map_or(true, |r| r["data"].as_array().is_none_or(Vec::is_empty))
+        {
+            db_only = false;
+            cursor = Value::Null;
+            continue;
+        }
+        let result = result?;
         sessions.extend(
             serde_json::from_value::<Vec<Session>>(result["data"].clone())
                 .context("decode Codex thread/list sessions")?,
@@ -250,11 +276,6 @@ pub fn sessions(
         ensure!(next != cursor, "Codex returned a repeated cursor");
         cursor = next;
     }
-    let directories = if worktrees {
-        session_directories(Path::new(root))
-    } else {
-        HashSet::from([normalized_path(Path::new(root))])
-    };
     for session in &mut sessions {
         session.current = !session.cwd.is_empty()
             && directories.contains(&normalized_path(Path::new(&session.cwd)));
