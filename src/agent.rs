@@ -79,7 +79,7 @@ pub fn response(message: Value, id: u64) -> Result<Option<Value>> {
     Ok(Some(message.get("result").cloned().unwrap_or(Value::Null)))
 }
 fn initialize() -> Value {
-    json!({"clientInfo":{"name":"annodiff","version":"0.1.0"}})
+    json!({"clientInfo":{"name":"annodiff","version":env!("CARGO_PKG_VERSION")}})
 }
 
 pub struct SessionClient {
