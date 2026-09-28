@@ -72,8 +72,16 @@ fn suspend(terminal: &mut ratatui::DefaultTerminal, command: &mut Command) -> Re
     ensure!(status.success(), "external command exited with {status}");
     Ok(())
 }
-fn send(app: &mut App, terminal: &mut ratatui::DefaultTerminal, id: &str) -> Result<()> {
+fn send(
+    app: &mut App,
+    terminal: &mut ratatui::DefaultTerminal,
+    id: &str,
+    archived: bool,
+) -> Result<()> {
     app.fresh()?;
+    if archived {
+        agent::unarchive_session(&app.session_cwd, id)?;
+    }
     let queued = !id.is_empty() && agent::session_loaded(id)?;
     let mut prompt = app.prompt();
     // Leave room for CLI arguments/quoting on Windows and Unix. NUL cannot be an argument.
@@ -101,7 +109,7 @@ fn send(app: &mut App, terminal: &mut ratatui::DefaultTerminal, id: &str) -> Res
             |path| format!("review retained at {}", path.display()),
         )
     };
-    let mut command = agent::command(&app.review.root, id, &prompt, queued);
+    let mut command = agent::command(&app.session_cwd, id, &prompt, queued);
     let deliver = if queued {
         command.output().context("queue review").and_then(|out| {
             ensure!(
@@ -187,10 +195,10 @@ fn run(mut app: App) -> Result<()> {
                         .into();
                 Ok(())
             }
-            Effect::Send(id) => {
+            Effect::Send { id, archived } => {
                 app.status = "Sending review…".into();
                 terminal.draw(|f| app.draw(f))?;
-                send(&mut app, &mut terminal, &id)
+                send(&mut app, &mut terminal, &id, archived)
             }
             Effect::Editor => (|| -> Result<()> {
                 let file = app.current().context("no selected file")?;

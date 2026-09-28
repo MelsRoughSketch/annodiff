@@ -105,7 +105,7 @@ fn list<'a, T: Clone + Into<Line<'a>>>(
     frame: &mut Frame,
     rect: Rect,
     labels: &[T],
-    (cursor, follow): (usize, bool),
+    (cursor, follow, margin): (usize, bool, usize),
     offset: &mut usize,
     focus: bool,
     marker: bool,
@@ -114,11 +114,12 @@ fn list<'a, T: Clone + Into<Line<'a>>>(
     if height == 0 {
         return;
     }
-    if follow && cursor < *offset {
-        *offset = cursor;
+    let margin = margin.min(height.saturating_sub(1) / 2);
+    if follow && cursor < offset.saturating_add(margin) {
+        *offset = cursor.saturating_sub(margin);
     }
-    if follow && cursor >= *offset + height {
-        *offset = cursor + 1 - height;
+    if follow && cursor >= offset.saturating_add(height - margin) {
+        *offset = cursor.saturating_add(margin + 1).saturating_sub(height);
     }
     *offset = (*offset).min(labels.len().saturating_sub(height));
     for (line, label) in labels.iter().enumerate().skip(*offset).take(height) {
@@ -275,7 +276,7 @@ pub fn draw(app: &mut App, frame: &mut Frame) {
             frame,
             inner,
             &app.labels[pane],
-            (app.cursor[pane], !app.manual_scroll[pane]),
+            (app.cursor[pane], !app.manual_scroll[pane], 0),
             &mut app.list_offsets[pane],
             app.pane == pane,
             true,
@@ -309,10 +310,10 @@ pub fn draw(app: &mut App, frame: &mut Frame) {
             Some(Modal::Search { .. }) => "Type to search/filter · Enter: keep · Esc: cancel",
             Some(Modal::Confirm { .. }) => "←→/Tab: choose · Enter: confirm · Esc: cancel",
             Some(Modal::Sessions { search: true, .. }) => {
-                "Type to search · Tab: session list · Enter/Ctrl+Enter/F2: preview · Esc: cancel"
+                "Type to search · Tab: filters · Enter/Ctrl+Enter/F2: preview · Esc: cancel"
             }
             Some(Modal::Sessions { .. }) => {
-                "q: quit · h/l/←→/a: PWD/All · ↑↓/jk: session · Tab: search · Enter/Ctrl+Enter/F2: preview · Esc: cancel"
+                "q: quit · Tab: filter · ←→: change · ↑↓: session · /: search · Enter: preview · Esc: cancel"
             }
             Some(Modal::Preview { .. }) => {
                 "q: quit · ↑↓/PgUp/PgDn: scroll · Tab: pane · Enter/Ctrl+Enter/F2: send/copy · Esc: cancel"
@@ -867,18 +868,6 @@ fn draw_modal(
                 );
             }
         }
-        Modal::Loading { .. } => {
-            let rect = centered(area, 60, 5);
-            frame.render_widget(Clear, rect);
-            let inner = bordered(frame, rect, " Codex ".into(), true);
-            text(
-                frame,
-                inner,
-                "Loading sessions…\nEsc: cancel · c: copy review to clipboard",
-                0,
-                true,
-            );
-        }
         Modal::Confirm { action, choice } => {
             let rect = centered(area, 76, 10);
             frame.render_widget(Clear, rect);
@@ -933,13 +922,46 @@ fn draw_modal(
             frame.render_widget(Clear, area);
             inspection(frame, area, value);
         }
-        Modal::Sessions {
-            items,
-            input,
-            selection,
-            search,
-            current_only,
-        } => {
+        Modal::Sessions { .. } | Modal::Loading { .. } => {
+            let mut loading_selection = 0;
+            let (items, input, selection, search, options, control, viewport) = match modal {
+                Modal::Sessions {
+                    offset,
+                    manual_scroll,
+                    area,
+                    filter_areas,
+                    items,
+                    input,
+                    selection,
+                    search,
+                    options,
+                    control,
+                } => (
+                    items.as_slice(),
+                    input,
+                    selection,
+                    *search,
+                    options,
+                    control,
+                    Some((offset, manual_scroll, area, filter_areas)),
+                ),
+                Modal::Loading {
+                    input,
+                    options,
+                    control,
+                    ..
+                } => (
+                    &[][..],
+                    input,
+                    &mut loading_selection,
+                    false,
+                    options,
+                    control,
+                    None,
+                ),
+                _ => unreachable!(),
+            };
+            let loading = viewport.is_none();
             frame.render_widget(Clear, area);
             let query = input.lines().join(" ").to_lowercase();
             let mut labels = vec![
@@ -949,11 +971,11 @@ fn draw_modal(
             labels.extend(
                 items
                     .iter()
-                    .filter(|s| s.matches(&review.root, *current_only, &query))
+                    .filter(|s| s.matches(!options.all, &query))
                     .map(|s| {
                         format!(
                             "{}{} · {}",
-                            if s.cwd == review.root { "[here] " } else { "" },
+                            if s.current { "[here] " } else { "" },
                             s.title().split_whitespace().collect::<Vec<_>>().join(" "),
                             s.cwd
                         )
@@ -961,7 +983,7 @@ fn draw_modal(
             );
             *selection = (*selection).min(labels.len().saturating_sub(1));
             let search_area = Rect::new(area.x, area.y, area.width, 3.min(area.height));
-            input.set_block(block(" Search Codex sessions ", *search));
+            input.set_block(block(" Search Codex sessions ", search));
             frame.render_widget(&*input, search_area);
             let list_area = Rect::new(
                 area.x,
@@ -969,34 +991,107 @@ fn draw_modal(
                 area.width,
                 area.height - search_area.height,
             );
-            let inner = bordered(
-                frame,
-                list_area,
-                format!(
-                    " Destination · {} · h/l/←→/a: PWD/All · {} sessions · Enter: preview ",
-                    if *current_only {
-                        "[PWD] / All"
+            let filters = [
+                ("Filter", ["CWD", "All"], options.all),
+                ("Status", ["Active", "Archived"], options.archived),
+                ("Sort", ["Updated", "Created"], options.created),
+            ];
+            let summary = if loading {
+                "Loading sessions… ".into()
+            } else {
+                format!("{} sessions ", labels.len().saturating_sub(2))
+            };
+            let title_width = " Destination · ".width()
+                + summary.width()
+                + usize::from(!search)
+                + filters
+                    .iter()
+                    .map(|(name, values, _)| {
+                        name.width() + 2 + values[0].width() + values[1].width() + 5 + " · ".width()
+                    })
+                    .sum::<usize>();
+            let stacked_filters = title_width + 2 > list_area.width as usize;
+            let mut title = vec![Span::raw(" Destination · ")];
+            let mut filter_labels = Vec::new();
+            let mut filter_areas = [[Rect::default(); 2]; 3];
+            let hit_bounds =
+                list_area.inner(ratatui::layout::Margin::new(1, u16::from(stacked_filters)));
+            let mut x = list_area
+                .x
+                .saturating_add(1 + " Destination · ".width() as u16);
+            for (i, (name, values, second)) in filters.iter().enumerate() {
+                let y = if stacked_filters {
+                    x = hit_bounds.x;
+                    hit_bounds.y.saturating_add(i as u16)
+                } else {
+                    list_area.y
+                };
+                let focused = !search && *control == i;
+                let mut label = format!("{}{name}: ", if focused { ">" } else { "" });
+                for (side, value) in values.iter().enumerate() {
+                    if side > 0 {
+                        label.push_str(" / ");
+                    }
+                    let value = if *second == (side == 1) {
+                        format!("[{value}]")
                     } else {
-                        "PWD / [All]"
+                        (*value).into()
+                    };
+                    let start = x.saturating_add(label.width() as u16);
+                    filter_areas[i][side] =
+                        Rect::new(start, y, value.width() as u16, 1).intersection(hit_bounds);
+                    label.push_str(&value);
+                }
+                x = x.saturating_add(label.width() as u16 + " · ".width() as u16);
+                let span = Span::styled(
+                    label,
+                    if focused {
+                        selected()
+                    } else {
+                        Style::default()
                     },
-                    labels.len().saturating_sub(2)
-                ),
-                !*search,
-            );
-            list(
-                frame,
-                inner,
-                &labels,
-                (*selection, true),
-                &mut 0,
-                !*search,
-                false,
-            );
+                );
+                if stacked_filters {
+                    filter_labels.push(span);
+                } else {
+                    title.extend([span, Span::raw(" · ")]);
+                }
+            }
+            title.push(Span::raw(summary));
+            let border = block(Line::from(title), !search);
+            let mut inner = border.inner(list_area);
+            frame.render_widget(border, list_area);
+            let rows = filter_labels.len().min(inner.height as usize) as u16;
+            for (i, label) in filter_labels.into_iter().take(rows as usize).enumerate() {
+                frame.render_widget(
+                    Paragraph::new(Line::from(label)),
+                    Rect::new(inner.x, inner.y + i as u16, inner.width, 1),
+                );
+            }
+            inner.y += rows;
+            inner.height -= rows;
+            if loading {
+                text(frame, inner, "Loading sessions…", 0, true);
+            } else if let Some((offset, manual_scroll, list_area, areas)) = viewport {
+                *list_area = inner;
+                *areas = filter_areas;
+                list(
+                    frame,
+                    inner,
+                    &labels,
+                    (*selection, !*manual_scroll, 3),
+                    offset,
+                    !search,
+                    false,
+                );
+            }
         }
         Modal::Preview {
             destination,
             id: _,
             copy: _,
+            archived: _,
+            list_offset,
             selection,
             pane,
             offsets,
@@ -1058,8 +1153,8 @@ fn draw_modal(
                 frame,
                 inner,
                 &labels,
-                (*selection, true),
-                &mut 0,
+                (*selection, true, 3),
+                list_offset,
                 *pane == 0,
                 false,
             );

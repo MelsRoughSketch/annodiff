@@ -91,12 +91,12 @@ fn session_name_accepts_null_missing_and_empty() {
         Some(json!("")),
         Some(json!("Named session")),
     ] {
-        let mut value =
-            json!({"id":"thread", "preview":"Preview fallback", "cwd":"/repo", "updatedAt":1});
+        let mut value = json!({"id":"thread", "preview":"Preview fallback", "cwd":"/repo", "updatedAt":1, "current":true});
         if let Some(name) = name {
             value["name"] = name;
         }
         let session: agent::Session = serde_json::from_value(value.clone()).unwrap();
+        assert!(!session.current);
         assert_eq!(
             session.title(),
             if value["name"] == "Named session" {
@@ -112,11 +112,15 @@ fn session_name_accepts_null_missing_and_empty() {
 #[ignore = "reads local Codex session metadata without starting a model turn"]
 fn live_session_listing() {
     let root = std::env::current_dir().unwrap();
-    let sessions = agent::sessions(
-        root.to_str().unwrap(),
-        std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
-    )
-    .unwrap();
+    let cancel = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let mut client = agent::SessionClient::start(root.to_str().unwrap(), cancel.clone()).unwrap();
+    let sessions = client
+        .sessions(
+            root.to_str().unwrap(),
+            agent::SessionOptions::default(),
+            cancel,
+        )
+        .unwrap();
     assert!(sessions.iter().all(|s| !s.id.is_empty()));
     println!("Listed {} sessions", sessions.len());
 }

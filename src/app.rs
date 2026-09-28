@@ -73,18 +73,28 @@ pub enum Modal {
     Loading {
         cancel: Arc<AtomicBool>,
         receiver: Receiver<Result<Vec<agent::Session>>>,
+        options: agent::SessionOptions,
+        input: TextArea<'static>,
+        control: usize,
     },
     Sessions {
+        offset: usize,
+        manual_scroll: bool,
+        area: Rect,
+        filter_areas: [[Rect; 2]; 3],
         items: Vec<agent::Session>,
         input: TextArea<'static>,
         selection: usize,
         search: bool,
-        current_only: bool,
+        options: agent::SessionOptions,
+        control: usize,
     },
     Preview {
         destination: String,
         id: String,
         copy: bool,
+        archived: bool,
+        list_offset: usize,
         selection: usize,
         pane: usize,
         offsets: [usize; 2],
@@ -94,12 +104,13 @@ pub enum Effect {
     None,
     Quit,
     Editor,
-    Send(String),
+    Send { id: String, archived: bool },
     Clipboard(String),
 }
 
 pub struct App {
     pub review: Review,
+    pub session_cwd: String,
     pub state: PathBuf,
     pub language: String,
     pub file: Option<usize>,
@@ -141,7 +152,7 @@ pub struct App {
     pub highlight_pending: bool,
     pub cache: VecDeque<(usize, FileView)>,
     pub total_changes: usize,
-    session_worker: Option<thread::JoinHandle<()>>,
+    session_worker: Option<thread::JoinHandle<Option<agent::SessionClient>>>,
     _state_lock: Option<fs::File>,
 }
 impl Drop for App {
@@ -191,6 +202,7 @@ impl App {
             next
         };
         let mut app = Self::new(review, state);
+        app.session_cwd = fs::canonicalize(dir)?.to_string_lossy().into_owned();
         app._state_lock = Some(state_lock);
         app.language = review::response_language()?;
         app.commits = review::commits(&app.review.root)?;
@@ -201,6 +213,7 @@ impl App {
     pub fn new(review: Review, state: PathBuf) -> Self {
         let file = (!review.files.is_empty()).then_some(0);
         let mut app = Self {
+            session_cwd: review.root.clone(),
             review,
             state,
             language: String::new(),
@@ -1195,19 +1208,52 @@ impl App {
     pub fn start_sessions(&mut self) -> Result<()> {
         ensure!(self.review.pending() > 0, "no unsent Open comments to send");
         self.fresh()?;
+        self.load_sessions(agent::SessionOptions::default(), TextArea::default(), 0);
+        Ok(())
+    }
+    fn load_sessions(
+        &mut self,
+        options: agent::SessionOptions,
+        input: TextArea<'static>,
+        control: usize,
+    ) {
         self.close_modal();
-        if let Some(worker) = self.session_worker.take() {
-            let _ = worker.join();
-        }
-        let root = self.review.root.clone();
+        // Keep the initialized client in the completed worker between filter changes.
+        let client = self
+            .session_worker
+            .take()
+            .and_then(|worker| worker.join().ok())
+            .flatten();
+        let root = self.session_cwd.clone();
         let cancel = Arc::new(AtomicBool::new(false));
         let worker_cancel = cancel.clone();
         let (tx, receiver) = mpsc::channel();
         self.session_worker = Some(thread::spawn(move || {
-            let _ = tx.send(agent::sessions(&root, worker_cancel));
+            let mut client = match client {
+                Some(client) => client,
+                None => match agent::SessionClient::start(&root, worker_cancel.clone()) {
+                    Ok(client) => client,
+                    Err(error) => {
+                        let _ = tx.send(Err(error));
+                        return None;
+                    }
+                },
+            };
+            let result = client.sessions(&root, options, worker_cancel);
+            let reusable = result.is_ok();
+            if tx.send(result).is_ok() && reusable {
+                Some(client)
+            } else {
+                None
+            }
         }));
-        self.modal = Some(Modal::Loading { cancel, receiver });
-        Ok(())
+        self.modal = Some(Modal::Loading {
+            cancel,
+            receiver,
+            options,
+            input,
+            control,
+        });
     }
     pub fn poll(&mut self) -> bool {
         let result = if let Some(Modal::Loading { receiver, .. }) = &self.modal {
@@ -1222,12 +1268,26 @@ impl App {
                 );
                 Vec::new()
             });
+            let Some(Modal::Loading {
+                options,
+                input,
+                control,
+                ..
+            }) = self.modal.take()
+            else {
+                return false;
+            };
             self.modal = Some(Modal::Sessions {
+                offset: 0,
+                manual_scroll: false,
+                area: Rect::default(),
+                filter_areas: [[Rect::default(); 2]; 3],
                 items,
-                input: TextArea::default(),
+                input,
                 selection: 0,
                 search: false,
-                current_only: true,
+                options,
+                control,
             });
             true
         } else {
@@ -1282,12 +1342,79 @@ impl App {
                 let (pane, query) = (*pane, input.lines().join(" "));
                 self.filter(pane, query);
             }
-            if let Some(Modal::Sessions { selection, .. }) = &mut self.modal {
+            if let Some(Modal::Sessions {
+                selection,
+                offset,
+                manual_scroll,
+                ..
+            }) = &mut self.modal
+            {
                 *selection = 0;
+                *offset = 0;
+                *manual_scroll = false;
             }
             return Ok(Effect::None);
         }
         if let Event::Mouse(mouse) = event {
+            if let Some(Modal::Sessions {
+                items,
+                input,
+                options,
+                offset,
+                manual_scroll,
+                area,
+                filter_areas,
+                control,
+                search,
+                selection,
+            }) = &mut self.modal
+            {
+                if mouse.kind == MouseEventKind::Down(MouseButton::Left)
+                    && let Some(index) = filter_areas
+                        .iter()
+                        .flatten()
+                        .position(|r| r.contains((mouse.column, mouse.row).into()))
+                {
+                    *control = index / 2;
+                    *search = false;
+                    let current = [options.all, options.archived, options.created][*control];
+                    return if current == (index % 2 == 1) {
+                        Ok(Effect::None)
+                    } else {
+                        self.handle_modal(KeyEvent::new(K::Right, M::NONE))
+                    };
+                }
+                if area.contains((mouse.column, mouse.row).into()) {
+                    let query = input.lines().join(" ").to_lowercase();
+                    let len = 2 + items
+                        .iter()
+                        .filter(|s| s.matches(!options.all, &query))
+                        .count();
+                    match mouse.kind {
+                        MouseEventKind::ScrollDown | MouseEventKind::ScrollUp => {
+                            let delta = if mouse.kind == MouseEventKind::ScrollDown {
+                                3
+                            } else {
+                                -3
+                            };
+                            *offset = offset
+                                .saturating_add_signed(delta)
+                                .min(len.saturating_sub(area.height as usize));
+                            *manual_scroll = true;
+                        }
+                        MouseEventKind::Down(MouseButton::Left) => {
+                            let index = *offset + usize::from(mouse.row - area.y);
+                            if index < len {
+                                *selection = index;
+                                *search = false;
+                                return self.handle_modal(KeyEvent::new(K::Enter, M::NONE));
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+                return Ok(Effect::None);
+            }
             if self.editor.is_some() || self.modal.is_some() {
                 return Ok(Effect::None);
             }
@@ -1739,6 +1866,8 @@ impl App {
                         destination: "Clipboard".into(),
                         id: String::new(),
                         copy: true,
+                        archived: false,
+                        list_offset: 0,
                         selection: 0,
                         pane: 0,
                         offsets: [0; 2],
@@ -1805,11 +1934,16 @@ impl App {
                 }
             }
             Modal::Sessions {
+                offset,
+                manual_scroll,
+                area: _,
+                filter_areas: _,
                 items,
                 input,
                 selection,
                 search,
-                current_only,
+                options,
+                control,
             } => {
                 if key.code == K::Esc {
                     return Ok(Effect::None);
@@ -1818,13 +1952,34 @@ impl App {
                     && key.modifiers.is_empty()
                     && matches!(key.code, K::Char('a' | 'h' | 'l') | K::Left | K::Right)
                 {
-                    *current_only = !*current_only;
+                    let target = if key.code == K::Char('a') {
+                        0
+                    } else {
+                        *control
+                    };
+                    match target {
+                        0 | 1 => {
+                            if target == 0 {
+                                options.all = !options.all;
+                            } else {
+                                options.archived = !options.archived;
+                            }
+                            self.load_sessions(*options, std::mem::take(input), *control);
+                            return Ok(Effect::None);
+                        }
+                        _ => {
+                            options.created = !options.created;
+                            options.sort(items);
+                        }
+                    }
                     *selection = 0;
+                    *offset = 0;
+                    *manual_scroll = false;
                 }
                 let query = input.lines().join(" ").to_lowercase();
                 let filtered: Vec<_> = items
                     .iter()
-                    .filter(|s| s.matches(&self.review.root, *current_only, &query))
+                    .filter(|s| s.matches(!options.all, &query))
                     .collect();
                 if key.code == K::Enter || save_key(key) {
                     let copy = *selection == 1;
@@ -1841,7 +1996,17 @@ impl App {
                         filtered
                             .get(*selection - 2)
                             .map_or("New session".into(), |s| {
-                                format!("{}\nSession: {}\nDirectory: {}", s.title(), s.id, s.cwd)
+                                format!(
+                                    "{}\nSession: {}\nDirectory: {}{}",
+                                    s.title(),
+                                    s.id,
+                                    s.cwd,
+                                    if options.archived {
+                                        "\nArchived session: restored when you confirm sending"
+                                    } else {
+                                        ""
+                                    }
+                                )
                             })
                     } else {
                         "New session".into()
@@ -1850,23 +2015,35 @@ impl App {
                         destination,
                         id,
                         copy,
+                        archived: options.archived && *selection > 1,
+                        list_offset: 0,
                         selection: 0,
                         pane: 0,
                         offsets: [0; 2],
                     });
                     return Ok(Effect::None);
                 }
-                if key.code == K::Tab {
-                    *search = !*search;
+                if key.code == K::Tab || key.code == K::BackTab {
+                    if *search {
+                        *search = false;
+                    } else {
+                        *control = (*control + if key.code == K::BackTab { 2 } else { 1 }) % 3;
+                    }
                 } else if *search {
                     input.input(key);
                     *selection = 0;
+                    *offset = 0;
+                    *manual_scroll = false;
                 } else {
                     match key.code {
                         K::Down | K::Char('j') => {
+                            *manual_scroll = false;
                             *selection = (*selection + 1).min(filtered.len() + 1)
                         }
-                        K::Up | K::Char('k') => *selection = selection.saturating_sub(1),
+                        K::Up | K::Char('k') => {
+                            *manual_scroll = false;
+                            *selection = selection.saturating_sub(1);
+                        }
                         K::Char('/') => *search = true,
                         _ => {}
                     }
@@ -1876,6 +2053,8 @@ impl App {
                 destination: _,
                 id,
                 copy,
+                archived,
+                list_offset: _,
                 selection,
                 pane,
                 offsets,
@@ -1889,7 +2068,10 @@ impl App {
                     return Ok(if *copy {
                         Effect::Clipboard(self.prompt())
                     } else {
-                        Effect::Send(id.clone())
+                        Effect::Send {
+                            id: id.clone(),
+                            archived: *archived,
+                        }
                     });
                 }
                 if key.code == K::Tab {

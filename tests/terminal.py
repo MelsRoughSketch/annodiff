@@ -31,15 +31,66 @@ with tempfile.TemporaryDirectory(prefix="annodiff-terminal-") as directory:
     tools.mkdir()
     codex = tools / "codex"
     codex.write_text(f"#!{sys.executable}\n" + r'''
-import json, os, pathlib, re, sys
+import json, os, pathlib, re, sys, time
 if sys.argv[1:] == ["app-server"]:
     for line in sys.stdin:
         request = json.loads(line)
         if "id" not in request:
             continue
-        result = {} if request["method"] == "initialize" else {"data": [{"id": "unnamed", "name": None, "preview": "Unnamed session preview", "cwd": os.getcwd(), "updatedAt": 1}], "nextCursor": None}
+        method = request["method"]
+        with open(os.environ["FAKE_RPC_LOG"], "a") as log:
+            log.write(json.dumps(dict(request, pid=os.getpid())) + "\n")
+        behavior_file = pathlib.Path(os.environ["FAKE_RPC_BEHAVIOR"])
+        behavior = behavior_file.read_text() if behavior_file.exists() else ""
+        if behavior == "hang":
+            time.sleep(60)
+        elif behavior == "error":
+            print(json.dumps({"id": request["id"], "error": {"message": "injected failure"}}), flush=True)
+            continue
+        elif behavior == "exit":
+            sys.exit(0)
+        result = {}
+        if method == "config/read":
+            assert request["params"]["cwd"] == os.environ["FAKE_CWD"], request
+            result = {"config": {"model_provider": "test-provider", "features": {"worktrees": True}}}
+        elif method == "thread/list":
+            params = request["params"]
+            assert params["sourceKinds"] == ["cli", "vscode"], params
+            assert params["modelProviders"] == ["test-provider"], params
+            assert isinstance(params["archived"], bool), params
+            assert os.getcwd() == os.environ["FAKE_CWD"], os.getcwd()
+            assert params["cwd"] in (None, [os.getcwd()]), params
+            db_only = params["useStateDbOnly"]
+            mode = os.environ["FAKE_DB_MODE"]
+            if mode == "ready":
+                assert db_only, "must not scan rollouts when DB has results"
+            if db_only and mode == "error":
+                print(json.dumps({"id": request["id"], "error": {"message": "DB unavailable"}}), flush=True)
+                continue
+            def row(id, source="cli", provider="test-provider", archived=False, cwd=None, updated=20, created=10):
+                return dict(id=id, name=None, preview="ARCHIVED_FIXTURE" if archived else "Unnamed session preview " + id,
+                            cwd=cwd or os.getcwd(), updatedAt=updated, createdAt=created,
+                            source=source, modelProvider=provider, archived=archived)
+            rows = [row("unnamed"), row("second", source="vscode", updated=10, created=30),
+                    row("elsewhere", cwd="/other-project", updated=40, created=40),
+                    row("archived", archived=True), row("other-provider", provider="other")]
+            rows += [row("root-" + str(i), cwd=str(pathlib.Path(os.getcwd()).parent)) for i in range(30)]
+            rows += [row("exec-" + str(i), source="exec") for i in range(30)]
+            rows = [r for r in rows if r["source"] in params["sourceKinds"]
+                    and r["modelProvider"] in params["modelProviders"] and r["archived"] == params["archived"]]
+            if params["cwd"] is not None:
+                rows = [r for r in rows if r["cwd"] in params["cwd"]]
+            if db_only and mode == "empty":
+                rows = []
+            rows.sort(key=lambda r: r["createdAt" if params["sortKey"] == "created_at" else "updatedAt"], reverse=True)
+            offset = int(params.get("cursor") or 0)
+            result = {"data": rows[offset:offset+2], "nextCursor": str(offset+2) if offset+2 < len(rows) else None}
+        elif method == "thread/unarchive":
+            assert request["params"]["threadId"] == "archived"
+            pathlib.Path(os.environ["FAKE_PAYLOAD"]).with_suffix(".unarchive").write_text("restored")
         print(json.dumps({"id": request["id"], "result": result}), flush=True)
 else:
+    assert os.getcwd() == os.environ["FAKE_CWD"], os.getcwd()
     prompt = sys.argv[-1]
     match = re.search(r'Read the review in (".*?") and address', prompt)
     payload = pathlib.Path(os.environ["FAKE_PAYLOAD"])
@@ -69,10 +120,15 @@ print("fake-editor-finished", flush=True)
     for case, (failure, save_key, size) in enumerate(cases):
         root = directory / f"repo{case}"
         root.mkdir()
+        launch = root / "subdirectory"
+        launch.mkdir()
         payload = directory / f"payload{case}.md"
         env = dict(os.environ, TERM="xterm-256color", PATH=str(tools) + os.pathsep + os.environ["PATH"],
                    VISUAL=str(editor), CODEX_HOME=str(directory / "codex-home"),
                    XDG_CONFIG_HOME=str(config.parent), FAKE_PAYLOAD=str(payload), FAKE_FAIL=str(failure),
+                   FAKE_RPC_LOG=str(directory / f"rpc{case}.jsonl"), FAKE_CWD=str(launch),
+                   FAKE_RPC_BEHAVIOR=str(directory / f"rpc-behavior{case}"),
+                   FAKE_DB_MODE="empty" if case == 1 else "error" if case == 2 else "ready",
                    GIT_CONFIG_GLOBAL="/dev/null", GIT_CONFIG_SYSTEM="/dev/null")
         subprocess.run(["git", "init", "-q", str(root)], env=env, check=True)
         (root / "sample.go").write_text('package main\nfunc main() {}\n')
@@ -86,7 +142,7 @@ print("fake-editor-finished", flush=True)
         master, slave = pty.openpty()
         fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack("HHHH", 30, 120, 0, 0))
         original = termios.tcgetattr(slave)
-        process = subprocess.Popen([str(binary), str(root)], stdin=slave, stdout=slave, stderr=slave,
+        process = subprocess.Popen([str(binary)], cwd=launch, stdin=slave, stdout=slave, stderr=slave,
                                    env=env, start_new_session=True, preexec_fn=attach_terminal)
         output = bytearray()
 
@@ -122,6 +178,17 @@ print("fake-editor-finished", flush=True)
             wait_for(lambda: state.exists() and predicate(json.loads(state.read_text())),
                      "saved review update")
             return json.loads(state.read_text())
+
+        def rpc_requests():
+            path = Path(env["FAKE_RPC_LOG"])
+            return [json.loads(line) for line in path.read_text().splitlines()] if path.exists() else []
+
+        def alive(pid):
+            try:
+                os.kill(pid, 0)
+                return True
+            except ProcessLookupError:
+                return False
 
         def check_navigation():
             start = len(output)
@@ -224,8 +291,52 @@ print("fake-editor-finished", flush=True)
                 assert b"cannot lock" in other.stderr, other.stderr
                 assert state.read_bytes() == before
             send(save_key)  # Destination selection, not delivery.
-            wait_for(lambda: b"Destination" in output)
+            wait_for(lambda: b"2 sessions" in output)
             assert not payload.exists()
+            requests = [json.loads(line) for line in Path(env["FAKE_RPC_LOG"]).read_text().splitlines()]
+            listings = [r["params"] for r in requests if r["method"] == "thread/list"]
+            assert listings[0]["useStateDbOnly"] is True
+            assert all(p["cwd"] == [str(launch)] for p in listings)
+            assert len(listings) == (2 if case in (1, 2) else 1), listings
+            if case == 0:
+                start = len(output)
+                send("\x1b[<0;35;4M\x1b[<0;35;4m")  # Click Filter -> All.
+                wait_for(lambda: b"elsewhere" in output[start:], "All loads other directories")
+                start = len(output)
+                send("a")
+                wait_for(lambda: b"2 sessions" in output[start:], "CWD reload")
+                requests = [json.loads(line) for line in Path(env["FAKE_RPC_LOG"]).read_text().splitlines()]
+                assert sum(r["method"] == "initialize" for r in requests) == 1, "scope changes restarted app-server"
+                # Cancellation, RPC errors, and EOF must discard the connection and reap
+                # its process. The next load must create exactly one working replacement.
+                behavior_file = Path(env["FAKE_RPC_BEHAVIOR"])
+                for behavior in ("hang", "error", "exit"):
+                    behavior_file.write_text(behavior)
+                    count = len(rpc_requests())
+                    start = len(output)
+                    send("a")
+                    wait_for(lambda: len(rpc_requests()) > count, "injected RPC request")
+                    pid = rpc_requests()[-1]["pid"]
+                    if behavior == "hang":
+                        send("\x1b")
+                    else:
+                        wait_for(lambda: b"0 sessions" in output[start:], "failed listing")
+                    wait_for(lambda: not alive(pid), "failed/cancelled app-server was not reaped")
+                    behavior_file.unlink()
+                    start = len(output)
+                    send(save_key if behavior == "hang" else "a")
+                    wait_for(lambda: b"2 sessions" in output[start:], "reconnect after failure")
+                    assert sum(alive(pid) for pid in {r["pid"] for r in rpc_requests()}) == 1
+                # Closing a completed picker intentionally retains one idle connection.
+                pid = rpc_requests()[-1]["pid"]
+                send("\x1b")
+                pump()
+                assert alive(pid)
+                start = len(output)
+                send(save_key)
+                wait_for(lambda: b"2 sessions" in output[start:], "reopen completed picker")
+                assert rpc_requests()[-1]["pid"] == pid
+                expected_initializations = sum(r["method"] == "initialize" for r in rpc_requests())
             send("\r")  # Preview.
             wait_for(lambda: b"Comments to send" in output)
             assert not payload.exists()
@@ -262,7 +373,7 @@ print("fake-editor-finished", flush=True)
             payload.unlink()
             start = len(output)
             send(save_key)
-            wait_for(lambda: b"Destination" in output[start:], "history send destination")
+            wait_for(lambda: b"2 sessions" in output[start:], "history send destination")
             send("\r")
             wait_for(lambda: b"[history]" in output[start:], "history send preview")
             send("\r")
@@ -278,10 +389,42 @@ print("fake-editor-finished", flush=True)
                              if c["Text"] == "follow-up-e2e")
             assert bool(follow_up.get("Sent")) == (failure == 0)
             if case == 0:
+                send("1c")
+                send("archived-destination-e2e")
+                send(save_key)
+                wait_state(lambda saved: any(c["Text"] == "archived-destination-e2e"
+                           for f in saved["Files"] for c in f["Comments"]))
+                start = len(output)
+                send(save_key)
+                wait_for(lambda: b"2 sessions" in output[start:])
+                send("\x1b[<0;60;4M\x1b[<0;60;4m")  # Click Status -> Archived.
+                wait_for(lambda: b"ARCHIVED_FIXTURE" in output[start:])
+                requests = [json.loads(line) for line in Path(env["FAKE_RPC_LOG"]).read_text().splitlines()]
+                assert sum(r["method"] == "initialize" for r in requests) == expected_initializations, "reopening/filtering restarted app-server"
+                send("\t\x1b[C")  # Updated -> Created; keep archived selection.
+                send("\x1b[<0;10;7M\x1b[<0;10;7m")  # Click archived row -> preview.
+                wait_for(lambda: b"Comments to send" in output[start:])
+                assert not payload.with_suffix(".unarchive").exists()
+                payload.unlink()
+                send("\r")
+                wait_for(payload.exists)
+                wait_state(lambda saved: any(c["Text"] == "archived-destination-e2e" and c.get("Sent")
+                           for f in saved["Files"] for c in f["Comments"]))
+                assert payload.with_suffix(".unarchive").read_text() == "restored"
+                assert "archived-destination-e2e" in payload.read_text()
                 check_navigation()
             send("q")
             process.wait(timeout=5)
             assert process.returncode == 0
+            if case == 0:
+                requests = [json.loads(line) for line in Path(env["FAKE_RPC_LOG"]).read_text().splitlines()]
+                for pid in {r["pid"] for r in requests}:
+                    try:
+                        os.kill(pid, 0)
+                    except ProcessLookupError:
+                        pass
+                    else:
+                        raise AssertionError("app-server still running after exit")
             pump()
             assert output.count(b"\x1b[>1u") >= 2
             assert output.count(b"\x1b[>1u") == output.count(b"\x1b[<1u"), "keyboard protocol was not restored"
@@ -292,13 +435,23 @@ print("fake-editor-finished", flush=True)
             if case == 0:
                 before = state.read_bytes()
                 output.clear()
-                process = subprocess.Popen([str(binary), str(root)], stdin=slave, stdout=slave,
+                process = subprocess.Popen([str(binary)], cwd=launch, stdin=slave, stdout=slave,
                                            stderr=slave, env=env, start_new_session=True, preexec_fn=attach_terminal)
                 wait_for(lambda: b"Ready" in output)
                 assert state.read_bytes() == before, "restart changed saved review history"
+                send("1c")
+                send("quit-during-initialize")
+                send(save_key)
+                wait_state(lambda saved: any(c["Text"] == "quit-during-initialize"
+                           for f in saved["Files"] for c in f["Comments"]))
+                Path(env["FAKE_RPC_BEHAVIOR"]).write_text("hang")
+                count = len(rpc_requests())
+                send(save_key)
+                wait_for(lambda: len(rpc_requests()) > count, "blocked initialization")
                 send("q")
                 process.wait(timeout=5)
                 assert process.returncode == 0
+                assert not any(alive(pid) for pid in {r["pid"] for r in rpc_requests()})
                 assert termios.tcgetattr(slave) == original
         except Exception:
             print(f"FAIL: case {case} ({failure=}, {size=})", file=sys.stderr)
