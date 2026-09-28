@@ -256,7 +256,7 @@ impl App {
         }
         let source = self
             .view()
-            .and_then(|v| v.source(self.cursor[0], self.side));
+            .and_then(|v| v.display_source(self.cursor[0], self.side));
         let previous = self.review.split;
         self.review.split = split;
         if let Err(error) = self.review.save(&self.state) {
@@ -272,7 +272,7 @@ impl App {
         }
         self.layout_diff(self.diff_inner.width as usize);
         if let (Some(source), Some(v)) = (source, self.view())
-            && let Some(row) = v.visual_for_source(source, self.side)
+            && let Some(row) = v.visual_for_display(source, self.side)
         {
             self.cursor[0] = row;
         }
@@ -341,6 +341,67 @@ impl App {
         if !self.split() {
             self.side = 0;
         }
+    }
+    pub fn expand_context(&mut self, full: bool) -> Result<()> {
+        self.ensure_view();
+        let file = self.file.context("no selected file")?;
+        let view = self.view().unwrap();
+        let collapse = full && view.expanded.is_some();
+        if !full && view.expanded.is_some() && view.context_visible.is_none() {
+            self.status = "All context is already visible · Z: collapse".into();
+            return Ok(());
+        }
+        let display = view
+            .expanded
+            .as_ref()
+            .and_then(|_| view.display_source(self.cursor[0], self.side));
+        let source = view.source(self.cursor[0], self.side).or_else(|| {
+            (self.cursor[0]..view.len())
+                .chain((0..self.cursor[0]).rev())
+                .find_map(|row| view.source(row, self.side))
+        });
+        let anchor = self
+            .anchor
+            .and_then(|(row, side)| Some((view.source(row, side)?, side)));
+        let screen_row = self.cursor[0].saturating_sub(self.offset);
+        let f = &self.review.files[file];
+        if collapse || view.expanded.is_none() {
+            let next = if collapse {
+                FileView::new(f, self.split())
+            } else {
+                FileView::expand(f, review::expand_file(&self.review, f)?, self.split())?
+            };
+            *self.view_mut().unwrap() = next;
+        }
+        let split = self.split();
+        let view = &mut self.cache.iter_mut().find(|(i, _)| *i == file).unwrap().1;
+        view.layout(self.diff_inner.width as usize, self.bias, self.wrap);
+        let display = if collapse { None } else { display }.or_else(|| {
+            source
+                .and_then(|i| view.visual_for_source(i, self.side))
+                .and_then(|row| view.display_source(row, self.side))
+        });
+        if full {
+            view.context_visible = None;
+        } else {
+            view.expand_near(display.unwrap_or(0));
+        }
+        view.rebuild_rows(&self.review.files[file], split);
+        view.layout(self.diff_inner.width as usize, self.bias, self.wrap);
+        self.cursor[0] = display
+            .and_then(|i| view.visual_for_display(i, self.side))
+            .unwrap_or(0);
+        self.anchor = anchor.and_then(|(i, side)| Some((view.visual_for_source(i, side)?, side)));
+        self.offset = self.cursor[0].saturating_sub(screen_row);
+        self.status = if collapse {
+            "Diff context restored"
+        } else if full {
+            "Full file · Z: collapse · expanded context is read-only"
+        } else {
+            "Context expanded · z: show 10 more nearby lines · Z: collapse"
+        }
+        .into();
+        Ok(())
     }
     pub fn layout_diff(&mut self, width: usize) {
         self.ensure_view();
@@ -617,7 +678,7 @@ impl App {
                 comment: index,
             });
         }
-        let source = view.source(self.cursor[0], self.side)?;
+        let source = view.display_source(self.cursor[0], self.side)?;
         view.comments[source][self.side].map(|comment| CommentRef {
             history: false,
             file,
@@ -873,7 +934,7 @@ impl App {
         } else {
             let (start, end) = self
                 .bounds()
-                .context("select a source line, not an empty alignment cell")?;
+                .context("select a line in the original diff; expanded context is read-only")?;
             ensure!(
                 f.lines[start..=end].iter().any(|l| l.old > 0 || l.new > 0),
                 "select a source line inside a diff hunk"
@@ -1021,7 +1082,7 @@ impl App {
             let index =
                 (current as isize + step * offset as isize).rem_euclid(count as isize) as usize;
             let (row, side) = (index / sides, index % sides);
-            if let Some(i) = view.source(row, side)
+            if let Some(i) = view.display_source(row, side)
                 && view.code[i].text.to_lowercase().contains(&query)
             {
                 self.cursor[0] = row;
@@ -1425,7 +1486,7 @@ impl App {
             return Ok(Effect::None);
         }
         match key.code {
-            K::Char('f' | '[' | ']') => self.focus(0),
+            K::Char('f' | 'z' | 'Z' | '[' | ']') => self.focus(0),
             K::Char('v' | 'x' | 'd') if self.pane != 2 => self.focus(0),
             K::Char('c' | 'e') if self.pane == 2 || self.pane == 3 => self.focus(0),
             K::Char('n' | 'N')
@@ -1516,6 +1577,7 @@ impl App {
                 }
             }
             K::Char('s') => self.set_split(!self.review.split)?,
+            K::Char('z' | 'Z') => self.expand_context(code == K::Char('Z'))?,
             K::Char('f') => {
                 self.focus(0);
                 self.wrap = !self.wrap;

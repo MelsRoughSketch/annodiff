@@ -1,4 +1,5 @@
 use crate::review::{Commit, File, Line};
+use anyhow::{Result, ensure};
 use ratatui::style::{Color, Style};
 use std::{
     collections::HashMap,
@@ -93,6 +94,10 @@ pub struct Token {
 }
 
 pub struct FileView {
+    pub expanded: Option<File>,
+    pub context_visible: Option<Vec<bool>>,
+    source_indices: Vec<Option<usize>>,
+    display_indices: Vec<Option<usize>>,
     pub code: Vec<CodeLine>,
     pub rows: Vec<Row>,
     pub digits: usize,
@@ -177,6 +182,10 @@ impl FileView {
             line_hunks.push(hunks.len() - 1);
         }
         let mut view = Self {
+            expanded: None,
+            context_visible: None,
+            source_indices: Vec::new(),
+            display_indices: Vec::new(),
             code: file
                 .lines
                 .iter()
@@ -215,6 +224,138 @@ impl FileView {
         view
     }
     pub fn rebuild_rows(&mut self, file: &File, split: bool) {
+        let Some(mut expanded) = self.expanded.take() else {
+            self.rebuild_display_rows(file, split);
+            return;
+        };
+        expanded.comments = file.comments.clone();
+        for comment in expanded.comments.iter_mut().filter(|c| !c.file) {
+            comment.start = self.display_indices[comment.start].unwrap();
+            comment.end = self.display_indices[comment.end].unwrap();
+        }
+        self.rebuild_display_rows(&expanded, split);
+        if let Some(visible) = &self.context_visible {
+            let mut rows = Vec::new();
+            for row in self.rows.drain(..) {
+                if matches!(row, Row::Code(pair) if !pair.iter().flatten().any(|i| visible[*i])) {
+                    if !matches!(rows.last(), Some(Row::Gap(_))) {
+                        rows.extend([Row::Gap(false), Row::Gap(true), Row::Gap(false)]);
+                    }
+                } else {
+                    rows.push(row);
+                }
+            }
+            self.rows = rows;
+        }
+        // Full context merges Git hunks; retain navigation between the original hunks.
+        let mut hunk = 0;
+        let hunks: Vec<_> = file
+            .lines
+            .iter()
+            .map(|l| {
+                hunk += usize::from(l.text.starts_with("@@ "));
+                hunk
+            })
+            .collect();
+        self.hunk_rows = Default::default();
+        let mut previous = [None, None];
+        for (row, item) in self.rows.iter().enumerate() {
+            if let Row::Code(pair) = item {
+                for side in 0..2 {
+                    if let Some(source) = pair[side].and_then(|i| self.source_indices[i]) {
+                        let l = &file.lines[source];
+                        if (l.old > 0) != (l.new > 0) && previous[side] != Some(hunks[source]) {
+                            self.hunk_rows[side].push(row);
+                            previous[side] = Some(hunks[source]);
+                        }
+                    }
+                }
+            }
+        }
+        self.expanded = Some(expanded);
+    }
+    pub fn expand(file: &File, expanded: File, split: bool) -> Result<Self> {
+        let lookup: HashMap<_, _> = expanded
+            .lines
+            .iter()
+            .enumerate()
+            .filter(|(_, l)| l.old > 0 || l.new > 0)
+            .map(|(i, l)| ((l.old, l.new, l.text.as_str()), i))
+            .collect();
+        let display_indices: Vec<_> = file
+            .lines
+            .iter()
+            .map(|l| lookup.get(&(l.old, l.new, l.text.as_str())).copied())
+            .collect();
+        ensure!(
+            file.lines
+                .iter()
+                .zip(&display_indices)
+                .all(|(l, i)| l.old == 0 && l.new == 0 || i.is_some()),
+            "File changed since this diff was loaded; press r to refresh before expanding"
+        );
+        let changed = |l: &&Line| (l.old > 0) != (l.new > 0);
+        ensure!(
+            file.lines
+                .iter()
+                .filter(changed)
+                .eq(expanded.lines.iter().filter(changed)),
+            "File changed; press r to refresh before expanding"
+        );
+        ensure!(
+            file.comments.iter().all(|c| c.file
+                || display_indices.get(c.start).is_some_and(Option::is_some)
+                    && display_indices.get(c.end).is_some_and(Option::is_some)),
+            "Cannot expand a comment attached to diff metadata"
+        );
+        let mut view = Self::new(&expanded, split);
+        view.source_indices = vec![None; expanded.lines.len()];
+        for (source, display) in display_indices.iter().enumerate() {
+            if let Some(display) = display {
+                view.source_indices[*display] = Some(source);
+            }
+        }
+        view.display_indices = display_indices;
+        view.expanded = Some(expanded);
+        view.rebuild_rows(file, split);
+        Ok(view)
+    }
+    pub fn original_source(&self, display: usize) -> Option<usize> {
+        if self.expanded.is_some() {
+            self.source_indices[display]
+        } else {
+            Some(display)
+        }
+    }
+    pub fn expand_near(&mut self, display: usize) {
+        let file = self.expanded.as_ref().unwrap();
+        let visible = self.context_visible.get_or_insert_with(|| {
+            file.lines
+                .iter()
+                .enumerate()
+                .map(|(i, l)| self.source_indices[i].is_some() || l.old == 0 && l.new == 0)
+                .collect()
+        });
+        let Some(next) = (0..visible.len())
+            .filter(|i| !visible[*i])
+            .min_by_key(|i| i.abs_diff(display))
+        else {
+            return;
+        };
+        let step = if next < display { -1 } else { 1 };
+        let mut i = next;
+        for _ in 0..10 {
+            if visible[i] {
+                break;
+            }
+            visible[i] = true;
+            let Some(next) = i.checked_add_signed(step).filter(|i| *i < visible.len()) else {
+                break;
+            };
+            i = next;
+        }
+    }
+    fn rebuild_display_rows(&mut self, file: &File, split: bool) {
         self.split = split;
         self.comment_text = file
             .comments
@@ -414,12 +555,23 @@ impl FileView {
         Some((row, visual - self.starts[row]))
     }
     pub fn visual_for_source(&self, source: usize, side: usize) -> Option<usize> {
+        let source = if self.expanded.is_some() {
+            *self.display_indices.get(source)?.as_ref()?
+        } else {
+            source
+        };
+        self.visual_for_display(source, side)
+    }
+    pub fn visual_for_display(&self, source: usize, side: usize) -> Option<usize> {
         self.rows
             .iter()
             .position(|row| matches!(row, Row::Code(pair) if pair[side] == Some(source)))
             .map(|row| self.starts[row])
     }
     pub fn source(&self, visual: usize, side: usize) -> Option<usize> {
+        self.original_source(self.display_source(visual, side)?)
+    }
+    pub fn display_source(&self, visual: usize, side: usize) -> Option<usize> {
         let (row, part) = self.locate(visual)?;
         if let Row::Code(pair) = self.rows[row]
             && self.fragments[row][side].get(part).is_some()
@@ -429,19 +581,25 @@ impl FileView {
         None
     }
     pub fn selectable(&self, visual: usize, side: usize) -> bool {
-        self.source(visual, side).is_some()
+        self.display_source(visual, side).is_some()
             || self.locate(visual).is_some_and(
                 |(r, _)| matches!(self.rows[r],Row::Comment{side:s,..} if !self.split || s==side),
             )
     }
     pub fn highlight_visible(&mut self, file: &File, start: usize, height: usize) -> bool {
+        let expanded = self.expanded.take();
+        let pending = self.highlight_display(expanded.as_ref().unwrap_or(file), start, height);
+        self.expanded = expanded;
+        pending
+    }
+    fn highlight_display(&mut self, file: &File, start: usize, height: usize) -> bool {
         let started = Instant::now();
         // Only parse through the last visible source line. A new file can be one
         // enormous hunk; parsing the whole hunk stalls every Files selection.
         let mut ends = HashMap::<(usize, usize), usize>::new();
         for visual in start..start.saturating_add(height).min(self.len()) {
             for side in 0..2 {
-                if let Some(i) = self.source(visual, side) {
+                if let Some(i) = self.display_source(visual, side) {
                     ends.entry((self.line_hunks[i], side))
                         .and_modify(|end| *end = (*end).max(i + 1))
                         .or_insert(i + 1);
