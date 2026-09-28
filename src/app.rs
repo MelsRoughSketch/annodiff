@@ -1664,9 +1664,7 @@ impl App {
             K::Char('-') => self.zoom = self.zoom.saturating_sub(1),
             K::Char('{' | '}') if self.zoom < 2 => {
                 let step = if code == K::Char('}') { 5 } else { -5 };
-                self.set_sidebar_percent(
-                    self.sidebar_percent + if self.pane == 0 { -step } else { step },
-                );
+                self.set_sidebar_percent(self.sidebar_percent + step);
             }
             K::Char('r') => self.refresh(false)?,
             K::Char('R') => {
