@@ -1483,6 +1483,173 @@ fn diff_drag_selects_rows_on_starting_side_and_keeps_range_after_release() {
 }
 
 #[test]
+fn pane_width_keys_follow_focus_and_preserve_zoom_and_selection() {
+    let dir = tempfile::tempdir().unwrap();
+    for split in [false, true] {
+        let mut app = App::new(
+            Review {
+                files: vec![fixture()],
+                split,
+                ..Default::default()
+            },
+            dir.path().join("state.json"),
+        );
+        app.wrap = true;
+        let mut terminal = Terminal::new(TestBackend::new(100, 30)).unwrap();
+        app.focus(0);
+        draw(&mut app, &mut terminal);
+        press(&mut app, K::Char('v'));
+        press(&mut app, K::Down);
+        let selection = app.bounds();
+        for pane in 0..4 {
+            app.focus(pane);
+            for zoom in 0..=2 {
+                app.zoom = zoom;
+                press(&mut app, K::Char('}'));
+                draw(&mut app, &mut terminal);
+                let percent = if zoom == 2 {
+                    30
+                } else if pane == 0 {
+                    25
+                } else {
+                    35
+                };
+                assert_eq!(app.sidebar_percent, percent);
+                assert_eq!((app.pane, app.zoom, app.bias), (pane, zoom, 0));
+                assert_eq!(app.bounds(), selection);
+                assert_eq!(
+                    app.pane_rects[pane].width,
+                    if zoom == 2 {
+                        100
+                    } else if pane == 0 {
+                        100 - percent as u16
+                    } else {
+                        percent as u16
+                    }
+                );
+                press(&mut app, K::Char('{'));
+                assert_eq!(app.sidebar_percent, 30);
+            }
+        }
+        app.zoom = 0;
+        app.focus(0);
+        for (key, expected) in [('}', 10), ('{', 90)] {
+            for _ in 0..30 {
+                press(&mut app, K::Char(key));
+            }
+            draw(&mut app, &mut terminal);
+            assert_eq!(app.sidebar_percent, expected);
+            assert_eq!(app.bounds(), selection);
+        }
+        press(&mut app, K::Char('/'));
+        press(&mut app, K::Char('{'));
+        press(&mut app, K::Char('}'));
+        assert_eq!(app.queries[0], "{}");
+        assert_eq!(app.sidebar_percent, 90);
+        press(&mut app, K::Esc);
+        app.start_edit(None, false).unwrap();
+        press(&mut app, K::Char('{'));
+        press(&mut app, K::Char('}'));
+        assert_eq!(app.editor.as_ref().unwrap().input.lines().join(""), "{}");
+        assert_eq!(app.sidebar_percent, 90);
+    }
+}
+
+#[test]
+fn pane_border_drag_resizes_without_changing_focus_or_selection() {
+    use crossterm::event::{MouseButton, MouseEvent, MouseEventKind};
+    let dir = tempfile::tempdir().unwrap();
+    let mut f = fixture();
+    f.comments.push(Comment {
+        file: true,
+        text: "file note".into(),
+        ..Default::default()
+    });
+    let mut app = App::new(
+        Review {
+            files: vec![f],
+            split: true,
+            ..Default::default()
+        },
+        dir.path().join("state.json"),
+    );
+    let mut terminal = Terminal::new(TestBackend::new(100, 30)).unwrap();
+    let mouse = |kind, column| {
+        Event::Mouse(MouseEvent {
+            kind,
+            column,
+            row: 5,
+            modifiers: M::NONE,
+        })
+    };
+    for pane in 0..4 {
+        app.focus(pane);
+        for zoom in 0..=2 {
+            app.zoom = zoom;
+            for edge in [29, 30] {
+                app.sidebar_percent = 30;
+                draw(&mut app, &mut terminal);
+                let cursor = app.cursor;
+                let anchor = app.anchor;
+                let bias = app.bias;
+                app.handle(mouse(MouseEventKind::Down(MouseButton::Left), edge))
+                    .unwrap();
+                app.handle(mouse(MouseEventKind::Drag(MouseButton::Left), edge + 10))
+                    .unwrap();
+                draw(&mut app, &mut terminal);
+                assert_eq!(app.sidebar_percent, if zoom == 2 { 30 } else { 40 });
+                if zoom < 2 {
+                    assert_eq!(
+                        (app.pane, app.cursor, app.anchor, app.bias),
+                        (pane, cursor, anchor, bias)
+                    );
+                    assert_eq!(app.pane_rects[app.left_pane].width, 40);
+                    if pane == 2 {
+                        assert!(app.inspection.is_some());
+                    }
+                }
+                app.handle(mouse(MouseEventKind::Up(MouseButton::Left), 99))
+                    .unwrap();
+                assert_eq!(app.sidebar_percent, if zoom == 2 { 30 } else { 90 });
+                app.handle(mouse(MouseEventKind::Drag(MouseButton::Left), 0))
+                    .unwrap();
+                assert_eq!(app.sidebar_percent, if zoom == 2 { 30 } else { 90 });
+            }
+        }
+    }
+    app.focus(0);
+    app.zoom = 0;
+    app.sidebar_percent = 30;
+    draw(&mut app, &mut terminal);
+    app.handle(mouse(MouseEventKind::Down(MouseButton::Left), 30))
+        .unwrap();
+    app.handle(mouse(MouseEventKind::Drag(MouseButton::Left), 0))
+        .unwrap();
+    assert_eq!(app.sidebar_percent, 10);
+    app.handle(Event::Resize(1, 1)).unwrap();
+    terminal.backend_mut().resize(1, 1);
+    terminal
+        .resize(ratatui::layout::Rect::new(0, 0, 1, 1))
+        .unwrap();
+    draw(&mut app, &mut terminal);
+    app.handle(mouse(MouseEventKind::Up(MouseButton::Left), 99))
+        .unwrap();
+    assert_eq!(app.sidebar_percent, 10);
+    terminal.backend_mut().resize(200, 30);
+    terminal
+        .resize(ratatui::layout::Rect::new(0, 0, 200, 30))
+        .unwrap();
+    draw(&mut app, &mut terminal);
+    assert_eq!(app.pane_rects[0].width, 180);
+    app.handle(mouse(MouseEventKind::Down(MouseButton::Left), 20))
+        .unwrap();
+    press(&mut app, K::Char('{'));
+    app.handle(mouse(MouseEventKind::Up(MouseButton::Left), 199))
+        .unwrap();
+    assert_eq!(app.sidebar_percent, 15);
+}
+
+#[test]
 fn dragging_split_divider_resizes_without_selecting_lines() {
     use crossterm::event::{MouseButton, MouseEvent, MouseEventKind};
     let dir = tempfile::tempdir().unwrap();
