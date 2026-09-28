@@ -84,15 +84,6 @@ impl Comment {
     pub fn sendable(&self, history: bool) -> bool {
         self.pending() && (!history || self.send_from_history)
     }
-    pub fn delivery_status(&self, history: bool) -> &'static str {
-        if self.sent {
-            "Sent"
-        } else if history && !self.send_from_history {
-            "Excluded"
-        } else {
-            "Unsent"
-        }
-    }
     pub fn includes(&self, index: usize, line: &Line) -> bool {
         !self.file
             && index >= self.start

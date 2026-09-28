@@ -2637,7 +2637,7 @@ fn unsent_comments_remain_sendable_after_reload() {
 }
 
 #[test]
-fn historical_comment_send_selection_preserves_archive_and_legacy_state() {
+fn historical_comment_preview_preserves_archive_and_legacy_state() {
     let dir = tempfile::tempdir().unwrap();
     let mut f = fixture();
     f.comments.push(Comment {
@@ -2646,25 +2646,17 @@ fn historical_comment_send_selection_preserves_archive_and_legacy_state() {
         text: "historical note".into(),
         ..Default::default()
     });
-    let mut app = App::new(
-        Review {
-            history: vec![f],
-            ..Default::default()
-        },
-        dir.path().join("state.json"),
-    );
+    let current = Review {
+        files: vec![f],
+        ..Default::default()
+    };
+    let refreshed = current.refresh(Review::default(), false);
+    let mut app = App::new(refreshed, dir.path().join("state.json"));
+    app.review.save(&app.state).unwrap();
     app.file_only = false;
     app.open_only = false;
     app.rebuild_comments();
     app.focus(2);
-    assert_eq!(app.review.pending(), 0);
-    assert!(
-        app.labels[2][0]
-            .spans
-            .iter()
-            .any(|s| s.content == "Excluded")
-    );
-    press(&mut app, K::Char('p'));
     assert_eq!(app.review.pending(), 1);
     assert!(app.pending_refs()[0].history);
     assert!(app.prompt().contains("Historical snapshot:"));
@@ -2695,10 +2687,10 @@ fn historical_comment_send_selection_preserves_archive_and_legacy_state() {
     assert_eq!(app.review.pending(), 0);
     press(&mut app, K::Char('x'));
     assert_eq!(app.review.pending(), 1);
-    press(&mut app, K::Char('p'));
-    assert_eq!(app.review.pending(), 0);
-    // Missing opt-in in older saved reviews stays excluded, never silently resent.
-    let encoded = serde_json::to_string(&app.review).unwrap();
+    let archived = app.review.refresh(Review::default(), true);
+    assert_eq!(archived.pending(), 0);
+    // Legacy history cannot distinguish reload from manual Archive; preserve its exclusion.
+    let encoded = serde_json::to_string(&archived).unwrap();
     assert!(!encoded.contains("SendFromHistory"));
     assert_eq!(
         serde_json::from_str::<Review>(&encoded).unwrap().pending(),

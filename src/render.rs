@@ -1160,7 +1160,6 @@ c: add a file comment (whole file)   Enter: focus Diff for the selected file   e
 Comments
 /: filter comments by text or file path   n/N: jump to next/previous search match   Esc: clear the current search/filter
 u: show Open / all comments (shared with Files)   o: show comments for current file / all files   Enter: edit the selected comment; inspect history comments   v: inspect recorded comment and code
-p: include/exclude an unsent Open history comment in the next send
 x: toggle selected comment Done / Open   X: mark all comments matching filters Done   d: delete the selected comment
 
 Commits
@@ -1196,7 +1195,7 @@ fn help_lines(app: &App) -> Vec<Line<'static>> {
         2 => {
             if let Some(r) = app.selected_ref() {
                 hints.push(if r.history {
-                    "Enter: inspect history · p: include/exclude unsent Open comment in next send"
+                    "Enter: inspect the recorded comment and code"
                 } else {
                     "Enter: edit the selected comment"
                 });

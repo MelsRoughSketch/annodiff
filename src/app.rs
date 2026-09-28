@@ -595,7 +595,7 @@ impl App {
                         ),
                         Span::raw("/"),
                         Span::styled(
-                            c.delivery_status(history),
+                            if c.sent { "Sent" } else { "Unsent" },
                             Style::default().fg(if c.sent { Color::Cyan } else { Color::LightRed }),
                         ),
                         Span::raw(format!(
@@ -848,7 +848,7 @@ impl App {
         let mut recorded = format!(
             "[{}/{}]\n{}\n{}\n--------------------\n{}",
             if c.done { "Done" } else { "Open" },
-            c.delivery_status(r.history),
+            if c.sent { "Sent" } else { "Unsent" },
             Path::new(&self.review.root).join(&f.path).display(),
             c.location(&f.lines),
             c.text
@@ -1616,19 +1616,6 @@ impl App {
                 self.file_only = !self.file_only;
                 self.rebuild_comments();
                 self.preview_comment();
-            }
-            K::Char('p') if self.pane == 2 => {
-                if let Some(r) = self.selected_ref().filter(|r| r.history) {
-                    ensure!(
-                        self.comment(r).1.pending(),
-                        "only unsent Open history comments can be included"
-                    );
-                    let mut next = self.review.clone();
-                    let c = &mut next.history[r.file].comments[r.comment];
-                    c.send_from_history = !c.send_from_history;
-                    self.apply(next)?;
-                    self.preview_comment();
-                }
             }
             K::Char('X') if self.pane == 2 => {
                 let mut next = self.review.clone();
