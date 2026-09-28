@@ -1826,6 +1826,81 @@ fn diff_title_mode_clicks_focus_diff_and_mark_selected_mode() {
 }
 
 #[test]
+fn downward_navigation_switches_sides_only_when_the_focused_side_ends() {
+    for short_side in [0, 1] {
+        for key in [K::Down, K::Char('j'), K::PageDown] {
+            let dir = tempfile::tempdir().unwrap();
+            let patch = if short_side == 0 {
+                format!(
+                    "@@ -1,2 +1,10 @@\n first\n second\n{}",
+                    "+added\n".repeat(8)
+                )
+            } else {
+                format!(
+                    "@@ -1,10 +1,2 @@\n first\n second\n{}",
+                    "-removed\n".repeat(8)
+                )
+            };
+            let mut app = App::new(
+                Review {
+                    files: vec![file(&patch)],
+                    split: true,
+                    ..Default::default()
+                },
+                dir.path().join("state.json"),
+            );
+            app.focus(0);
+            let mut terminal = Terminal::new(TestBackend::new(120, 10)).unwrap();
+            draw(&mut app, &mut terminal);
+            let rows: Vec<_> = (0..app.view().unwrap().len())
+                .filter(|&row| app.view().unwrap().selectable(row, short_side))
+                .collect();
+            assert_eq!(rows.len(), 2);
+            app.side = short_side;
+            app.cursor[0] = rows[0];
+            press(&mut app, K::Char('v'));
+            press(&mut app, K::Down);
+            assert_eq!(app.side, short_side);
+            assert_eq!(app.cursor[0], rows[1]);
+            assert!(app.anchor.is_some());
+            let step = if key == K::PageDown {
+                app.pane_rects[0].height.saturating_sub(3).max(1) as usize
+            } else {
+                1
+            };
+            let end = (0..app.view().unwrap().len())
+                .rev()
+                .find(|&row| app.view().unwrap().selectable(row, 1 - short_side))
+                .unwrap();
+            press(&mut app, key);
+            assert_eq!(app.side, 1 - short_side);
+            assert_eq!(app.cursor[0], (rows[1] + step).min(end));
+            assert!(app.anchor.is_none());
+            for _ in 0..12 {
+                press(&mut app, K::Down);
+            }
+            assert_eq!(app.cursor[0], end);
+            assert_eq!(app.side, 1 - short_side);
+            // Absolute placement (including mouse dragging) stays on its chosen side.
+            app.side = short_side;
+            app.cursor[0] = rows[1];
+            app.anchor = Some((rows[0], short_side));
+            app.move_selection(1, Some(end));
+            assert_eq!(app.side, short_side);
+            assert_eq!(app.cursor[0], rows[1]);
+            assert_eq!(app.anchor, Some((rows[0], short_side)));
+            app.set_split(false).unwrap();
+            draw(&mut app, &mut terminal);
+            let side = app.side;
+            for _ in 0..15 {
+                press(&mut app, K::Down);
+            }
+            assert_eq!(app.side, side);
+        }
+    }
+}
+
+#[test]
 fn diff_drag_opens_comment_on_release_with_selected_range_and_side() {
     use crossterm::event::{MouseButton, MouseEvent, MouseEventKind};
     let dir = tempfile::tempdir().unwrap();
