@@ -596,13 +596,23 @@ pub fn snapshot(root: &str, base: &str, target: &str) -> Result<Review> {
         args.extend(["--raw", "-z", "--patch"]);
         args.extend(&revisions);
         args.push("--");
-        // ponytail: non-UTF-8 batches use the per-file fallback; split raw bytes if this becomes slow.
-        if let Ok(output) = String::from_utf8(git(root, &args)?)
-            && let Some((metadata, patch)) = output.split_once("\0\0")
+        let output = git(root, &args)?;
+        if let Some(separator) = output.windows(2).position(|bytes| bytes == b"\0\0")
+            && let Ok(metadata) = std::str::from_utf8(&output[..separator])
         {
+            // Decode each file independently; one legacy encoding must not discard the batch.
+            let patch = &output[separator + 2..];
             let fields: Vec<_> = metadata.split('\0').collect();
             let mut starts = vec![0];
-            starts.extend(patch.match_indices("\ndiff --git ").map(|(i, _)| i + 1));
+            let mut offset = 0;
+            let mut submodule = false;
+            for line in patch.split_inclusive(|b| *b == b'\n') {
+                if offset > 0 && line.starts_with(b"diff --git ") {
+                    starts.push(offset);
+                }
+                submodule |= line.starts_with(b"Submodule ");
+                offset += line.len();
+            }
             starts.push(patch.len());
             // Submodule log/diff and unmerged formats retain the per-file path.
             if fields.len() % 2 == 0
@@ -611,8 +621,8 @@ pub fn snapshot(root: &str, base: &str, target: &str) -> Result<Review> {
                     .0
                     .iter()
                     .all(|f| f[0].starts_with(':'))
-                && patch.starts_with("diff --git ")
-                && !patch.contains("\nSubmodule ")
+                && patch.starts_with(b"diff --git ")
+                && !submodule
                 && starts.len() == fields.len() / 2 + 1
             {
                 for (fields, bounds) in fields.as_chunks::<2>().0.iter().zip(starts.windows(2)) {
@@ -632,7 +642,7 @@ pub fn snapshot(root: &str, base: &str, target: &str) -> Result<Review> {
         }
         ensure!(local_path(path), "invalid Git file path: {path:?}");
         if let Some(patch) = patches.remove(path) {
-            review.files.push(diff_file(path, patch.into_bytes()));
+            review.files.push(diff_file(path, patch));
             continue;
         }
         let mut args = diff_args.clone();
