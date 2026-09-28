@@ -82,7 +82,7 @@ fn initialize() -> Value {
     json!({"clientInfo":{"name":"annodiff","version":"0.1.0"}})
 }
 
-struct RpcProcess {
+pub struct SessionClient {
     child: Child,
     input: ChildStdin,
     messages: Receiver<Result<Value>>,
@@ -90,14 +90,14 @@ struct RpcProcess {
     deadline: Instant,
     cancel: Arc<AtomicBool>,
 }
-impl Drop for RpcProcess {
+impl Drop for SessionClient {
     fn drop(&mut self) {
         let _ = self.child.kill();
         let _ = self.child.wait();
     }
 }
-impl RpcProcess {
-    fn start(root: &str, cancel: Arc<AtomicBool>) -> Result<Self> {
+impl SessionClient {
+    pub fn start(root: &str, cancel: Arc<AtomicBool>) -> Result<Self> {
         let mut child = Command::new("codex")
             .arg("app-server")
             .current_dir(root)
@@ -212,79 +212,83 @@ fn session_directories(root: &Path) -> HashSet<PathBuf> {
     directories
 }
 
-pub fn sessions(
-    root: &str,
-    options: SessionOptions,
-    cancel: Arc<AtomicBool>,
-) -> Result<Vec<Session>> {
-    let mut rpc = RpcProcess::start(root, cancel)?;
-    let config = rpc.call("config/read", json!({"includeLayers":false}))?;
-    let provider = config["config"]["model_provider"]
-        .as_str()
-        .unwrap_or("openai");
-    let worktrees = config["config"]["features"]["worktrees"]
-        .as_bool()
-        .unwrap_or(true);
-    let directories = if worktrees {
-        session_directories(Path::new(root))
-    } else {
-        HashSet::from([normalized_path(Path::new(root))])
-    };
-    let cwd = if options.all {
-        Value::Null
-    } else {
-        json!(directories)
-    };
-    let mut sessions = Vec::new();
-    let mut cursor = Value::Null;
-    let mut db_only = true;
-    loop {
-        let result = rpc.call(
-            "thread/list",
-            json!({
-                "limit": 100,
-                "sortKey": if options.created { "created_at" } else { "updated_at" },
-                "sourceKinds": ["cli", "vscode"],
-                "modelProviders": [provider],
-                "archived": options.archived,
-                "cwd": cwd,
-                "useStateDbOnly": db_only,
-                "cursor": cursor,
-            }),
-        );
-        // Match resume: repair rollouts only if the initial DB result is unusable.
-        // An empty later page must not restart a scan or change the list's source.
-        if db_only
-            && sessions.is_empty()
-            && result
-                .as_ref()
-                .map_or(true, |r| r["data"].as_array().is_none_or(Vec::is_empty))
-        {
-            db_only = false;
-            cursor = Value::Null;
-            continue;
+impl SessionClient {
+    pub fn sessions(
+        &mut self,
+        root: &str,
+        options: SessionOptions,
+        cancel: Arc<AtomicBool>,
+    ) -> Result<Vec<Session>> {
+        self.cancel = cancel;
+        self.deadline = Instant::now() + Duration::from_secs(30);
+        let config = self.call("config/read", json!({"includeLayers":false}))?;
+        let provider = config["config"]["model_provider"]
+            .as_str()
+            .unwrap_or("openai");
+        let worktrees = config["config"]["features"]["worktrees"]
+            .as_bool()
+            .unwrap_or(true);
+        let directories = if worktrees {
+            session_directories(Path::new(root))
+        } else {
+            HashSet::from([normalized_path(Path::new(root))])
+        };
+        let cwd = if options.all {
+            Value::Null
+        } else {
+            json!(directories)
+        };
+        let mut sessions = Vec::new();
+        let mut cursor = Value::Null;
+        let mut db_only = true;
+        loop {
+            let result = self.call(
+                "thread/list",
+                json!({
+                    "limit": 100,
+                    "sortKey": if options.created { "created_at" } else { "updated_at" },
+                    "sourceKinds": ["cli", "vscode"],
+                    "modelProviders": [provider],
+                    "archived": options.archived,
+                    "cwd": cwd,
+                    "useStateDbOnly": db_only,
+                    "cursor": cursor,
+                }),
+            );
+            // Match resume: repair rollouts only if the initial DB result is unusable.
+            // An empty later page must not restart a scan or change the list's source.
+            if db_only
+                && sessions.is_empty()
+                && result
+                    .as_ref()
+                    .map_or(true, |r| r["data"].as_array().is_none_or(Vec::is_empty))
+            {
+                db_only = false;
+                cursor = Value::Null;
+                continue;
+            }
+            let result = result?;
+            sessions.extend(
+                serde_json::from_value::<Vec<Session>>(result["data"].clone())
+                    .context("decode Codex thread/list sessions")?,
+            );
+            let next = result["nextCursor"].clone();
+            if next.is_null() {
+                break;
+            }
+            ensure!(next != cursor, "Codex returned a repeated cursor");
+            cursor = next;
         }
-        let result = result?;
-        sessions.extend(
-            serde_json::from_value::<Vec<Session>>(result["data"].clone())
-                .context("decode Codex thread/list sessions")?,
-        );
-        let next = result["nextCursor"].clone();
-        if next.is_null() {
-            break;
+        for session in &mut sessions {
+            session.current = !session.cwd.is_empty()
+                && directories.contains(&normalized_path(Path::new(&session.cwd)));
         }
-        ensure!(next != cursor, "Codex returned a repeated cursor");
-        cursor = next;
+        options.sort(&mut sessions);
+        Ok(sessions)
     }
-    for session in &mut sessions {
-        session.current = !session.cwd.is_empty()
-            && directories.contains(&normalized_path(Path::new(&session.cwd)));
-    }
-    options.sort(&mut sessions);
-    Ok(sessions)
 }
 pub fn unarchive_session(root: &str, id: &str) -> Result<()> {
-    let mut rpc = RpcProcess::start(root, Arc::new(AtomicBool::new(false)))?;
+    let mut rpc = SessionClient::start(root, Arc::new(AtomicBool::new(false)))?;
     rpc.call("thread/unarchive", json!({"threadId":id}))?;
     Ok(())
 }

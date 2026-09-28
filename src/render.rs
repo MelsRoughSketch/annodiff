@@ -985,37 +985,44 @@ fn draw_modal(
                 area.width,
                 area.height - search_area.height,
             );
-            let inner = bordered(
-                frame,
-                list_area,
-                format!(
-                    " Destination · {}{} · {}{} · {}{} · {} ",
-                    if *control == 0 { ">" } else { "" },
-                    if options.all {
-                        "CWD / [All]"
+            let filters = [
+                if options.all {
+                    "CWD / [All]"
+                } else {
+                    "[CWD] / All"
+                },
+                if options.archived {
+                    "Active / [Archived]"
+                } else {
+                    "[Active] / Archived"
+                },
+                if options.created {
+                    "Updated / [Created]"
+                } else {
+                    "[Updated] / Created"
+                },
+            ];
+            let mut title = vec![Span::raw(" Destination · ")];
+            for (i, label) in filters.iter().enumerate() {
+                let focused = !search && *control == i;
+                title.push(Span::styled(
+                    format!("{}{}", if focused { ">" } else { "" }, label),
+                    if focused {
+                        selected()
                     } else {
-                        "[CWD] / All"
+                        Style::default()
                     },
-                    if *control == 1 { ">" } else { "" },
-                    if options.archived {
-                        "Active / [Archived]"
-                    } else {
-                        "[Active] / Archived"
-                    },
-                    if *control == 2 { ">" } else { "" },
-                    if options.created {
-                        "Updated / [Created]"
-                    } else {
-                        "[Updated] / Created"
-                    },
-                    if loading {
-                        "Loading sessions…".into()
-                    } else {
-                        format!("{} sessions", labels.len().saturating_sub(2))
-                    }
-                ),
-                !search,
-            );
+                ));
+                title.push(Span::raw(" · "));
+            }
+            title.push(Span::raw(if loading {
+                "Loading sessions… ".into()
+            } else {
+                format!("{} sessions ", labels.len().saturating_sub(2))
+            }));
+            let border = block(Line::from(title), !search);
+            let inner = border.inner(list_area);
+            frame.render_widget(border, list_area);
             if loading {
                 text(frame, inner, "Loading sessions…", 0, true);
             } else {

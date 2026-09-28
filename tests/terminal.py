@@ -39,7 +39,7 @@ if sys.argv[1:] == ["app-server"]:
             continue
         method = request["method"]
         with open(os.environ["FAKE_RPC_LOG"], "a") as log:
-            log.write(json.dumps(request) + "\n")
+            log.write(json.dumps(dict(request, pid=os.getpid())) + "\n")
         result = {}
         if method == "config/read":
             result = {"config": {"model_provider": "test-provider", "features": {"worktrees": True}}}
@@ -283,6 +283,8 @@ print("fake-editor-finished", flush=True)
                 start = len(output)
                 send("a")
                 wait_for(lambda: b"2 sessions" in output[start:], "CWD reload")
+                requests = [json.loads(line) for line in Path(env["FAKE_RPC_LOG"]).read_text().splitlines()]
+                assert sum(r["method"] == "initialize" for r in requests) == 1, "scope changes restarted app-server"
             send("\r")  # Preview.
             wait_for(lambda: b"Comments to send" in output)
             assert not payload.exists()
@@ -345,6 +347,8 @@ print("fake-editor-finished", flush=True)
                 wait_for(lambda: b"2 sessions" in output[start:])
                 send("\t\x1b[C")  # Active -> Archived.
                 wait_for(lambda: b"ARCHIVED_FIXTURE" in output[start:])
+                requests = [json.loads(line) for line in Path(env["FAKE_RPC_LOG"]).read_text().splitlines()]
+                assert sum(r["method"] == "initialize" for r in requests) == 1, "reopening/filtering restarted app-server"
                 send("\t\x1b[C")  # Updated -> Created; keep archived selection.
                 send("\x1b[B\x1b[B\r")
                 wait_for(lambda: b"Comments to send" in output[start:])
@@ -360,6 +364,15 @@ print("fake-editor-finished", flush=True)
             send("q")
             process.wait(timeout=5)
             assert process.returncode == 0
+            if case == 0:
+                requests = [json.loads(line) for line in Path(env["FAKE_RPC_LOG"]).read_text().splitlines()]
+                for pid in {r["pid"] for r in requests}:
+                    try:
+                        os.kill(pid, 0)
+                    except ProcessLookupError:
+                        pass
+                    else:
+                        raise AssertionError("app-server still running after exit")
             pump()
             assert output.count(b"\x1b[>1u") >= 2
             assert output.count(b"\x1b[>1u") == output.count(b"\x1b[<1u"), "keyboard protocol was not restored"

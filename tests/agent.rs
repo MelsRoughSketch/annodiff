@@ -112,12 +112,15 @@ fn session_name_accepts_null_missing_and_empty() {
 #[ignore = "reads local Codex session metadata without starting a model turn"]
 fn live_session_listing() {
     let root = std::env::current_dir().unwrap();
-    let sessions = agent::sessions(
-        root.to_str().unwrap(),
-        agent::SessionOptions::default(),
-        std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
-    )
-    .unwrap();
+    let cancel = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let mut client = agent::SessionClient::start(root.to_str().unwrap(), cancel.clone()).unwrap();
+    let sessions = client
+        .sessions(
+            root.to_str().unwrap(),
+            agent::SessionOptions::default(),
+            cancel,
+        )
+        .unwrap();
     assert!(sessions.iter().all(|s| !s.id.is_empty()));
     println!("Listed {} sessions", sessions.len());
 }

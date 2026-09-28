@@ -147,7 +147,7 @@ pub struct App {
     pub highlight_pending: bool,
     pub cache: VecDeque<(usize, FileView)>,
     pub total_changes: usize,
-    session_worker: Option<thread::JoinHandle<()>>,
+    session_worker: Option<thread::JoinHandle<Option<agent::SessionClient>>>,
     _state_lock: Option<fs::File>,
 }
 impl Drop for App {
@@ -1213,15 +1213,34 @@ impl App {
         control: usize,
     ) {
         self.close_modal();
-        if let Some(worker) = self.session_worker.take() {
-            let _ = worker.join();
-        }
+        // Keep the initialized client in the completed worker between filter changes.
+        let client = self
+            .session_worker
+            .take()
+            .and_then(|worker| worker.join().ok())
+            .flatten();
         let root = self.session_cwd.clone();
         let cancel = Arc::new(AtomicBool::new(false));
         let worker_cancel = cancel.clone();
         let (tx, receiver) = mpsc::channel();
         self.session_worker = Some(thread::spawn(move || {
-            let _ = tx.send(agent::sessions(&root, options, worker_cancel));
+            let mut client = match client {
+                Some(client) => client,
+                None => match agent::SessionClient::start(&root, worker_cancel.clone()) {
+                    Ok(client) => client,
+                    Err(error) => {
+                        let _ = tx.send(Err(error));
+                        return None;
+                    }
+                },
+            };
+            let result = client.sessions(&root, options, worker_cancel);
+            let reusable = result.is_ok();
+            if tx.send(result).is_ok() && reusable {
+                Some(client)
+            } else {
+                None
+            }
         }));
         self.modal = Some(Modal::Loading {
             cancel,

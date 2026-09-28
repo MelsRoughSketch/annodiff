@@ -1130,6 +1130,36 @@ fn session_directory_scope_combines_with_search_and_selects_visible_session() {
             .map(|c| c.symbol())
             .collect::<String>()
     };
+    // Tab focus must be visible across the whole filter label, not just a marker.
+    let assert_focus =
+        |terminal: &Terminal<TestBackend>, active: Option<usize>| {
+            for (i, label) in ["[CWD] / All", "[Active] / Archived", "[Updated] / Created"]
+                .iter()
+                .enumerate()
+            {
+                let cells = terminal
+                    .backend()
+                    .buffer()
+                    .content
+                    .windows(label.len())
+                    .find(|cells| cells.iter().map(|c| c.symbol()).collect::<String>() == *label)
+                    .unwrap();
+                assert!(cells.iter().all(
+                    |cell| (cell.bg == ratatui::style::Color::LightCyan) == (active == Some(i))
+                ));
+            }
+        };
+    assert_focus(&terminal, Some(0));
+    for active in [1, 2, 0] {
+        press(&mut app, K::Tab);
+        draw(&mut app, &mut terminal);
+        assert_focus(&terminal, Some(active));
+    }
+    press(&mut app, K::Char('/'));
+    draw(&mut app, &mut terminal);
+    assert_focus(&terminal, None);
+    press(&mut app, K::Tab);
+    draw(&mut app, &mut terminal);
     assert!(screen(&terminal).contains("[CWD] / All"));
     assert!(screen(&terminal).contains("2 sessions"));
     assert!(screen(&terminal).contains("[here] Fix linked"));
