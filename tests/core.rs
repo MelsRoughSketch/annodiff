@@ -730,12 +730,12 @@ fn pane_zoom_steps_and_layout() {
     for pane in 0..4 {
         app.focus(pane);
         for zoom in 0..=2 {
-            for key in ['+', '-'] {
+            for key in ['+', '_'] {
                 app.zoom = zoom;
                 press(&mut app, K::Char(key));
                 let expected = match (pane, key) {
                     (0, '+') => 2,
-                    (0, '-') => 0,
+                    (0, '_') => 0,
                     (_, '+') => (zoom + 1).min(2),
                     _ => zoom.saturating_sub(1),
                 };
@@ -1563,10 +1563,18 @@ fn sidebar_selection_uses_moving_marker_without_overriding_text_colors() {
     assert_eq!(b[(x, y)].fg, ratatui::style::Color::Rgb(80, 220, 220));
     // Marker + space + two status columns + space: file name retains yellow.
     assert_eq!(b[(x + 5, y)].fg, ratatui::style::Color::Rgb(255, 255, 0));
-    assert_eq!(b[(x + 5, y)].bg, ratatui::style::Color::Reset);
+    assert_eq!(b[(x + 5, y)].bg, ratatui::style::Color::Rgb(32, 40, 48));
+    assert_eq!(
+        b[(rect.right() - 2, y)].bg,
+        ratatui::style::Color::Rgb(32, 40, 48)
+    );
     press(&mut app, K::Down);
     draw(&mut app, &mut terminal);
     assert_eq!(terminal.backend().buffer()[(x, y)].symbol(), " ");
+    assert_eq!(
+        terminal.backend().buffer()[(x + 5, y)].bg,
+        ratatui::style::Color::Reset
+    );
     assert_eq!(terminal.backend().buffer()[(x, y + 1)].symbol(), "▶");
     for pane in [2, 3] {
         app.focus(pane);
@@ -1575,7 +1583,11 @@ fn sidebar_selection_uses_moving_marker_without_overriding_text_colors() {
         let marker = &terminal.backend().buffer()[(rect.x + 1, rect.y + 1)];
         assert_eq!(marker.symbol(), "▶");
         assert_eq!(marker.fg, ratatui::style::Color::Rgb(80, 220, 220));
-        assert_eq!(marker.bg, ratatui::style::Color::Reset);
+        assert_eq!(marker.bg, ratatui::style::Color::Rgb(32, 40, 48));
+        assert_eq!(
+            terminal.backend().buffer()[(x + 5, y + 1)].bg,
+            ratatui::style::Color::Reset
+        );
         assert_eq!(
             terminal.backend().buffer()[(x, y + 1)].fg,
             ratatui::style::Color::DarkGray
@@ -1847,7 +1859,7 @@ fn stacked_layout_focus_zoom_resize_and_state() {
             ratatui::layout::Rect::new(0, 0, 60, 100)
         );
         assert_eq!(app.pane_rects.iter().filter(|r| !r.is_empty()).count(), 1);
-        press(&mut app, K::Char('-'));
+        press(&mut app, K::Char('_'));
         assert_eq!(app.zoom, 0);
     }
     let mouse = |kind, x, y| {
@@ -3193,9 +3205,20 @@ fn file_tree_navigation_filters_mouse_and_layout() {
     assert_eq!(app.refs.len(), 1);
     press(&mut app, K::Up); // Directory navigation keeps the displayed diff.
     assert_eq!(app.file, Some(2));
-    press(&mut app, K::Enter);
+    press(&mut app, K::Char('+'));
+    let zoom = app.zoom;
+    press(&mut app, K::Char('-'));
+    assert_eq!(app.zoom, zoom);
+    press(&mut app, K::Char('-')); // Repeating collapse does not expand.
     assert_eq!(app.pane, 1);
     assert!(!app.tree_rows.contains(&Leaf(2)));
+    press(&mut app, K::Char('='));
+    press(&mut app, K::Char('=')); // Repeating expand does not collapse.
+    assert!(app.tree_rows.contains(&Leaf(2)));
+    assert_eq!(app.zoom, zoom);
+    press(&mut app, K::Char('_'));
+    assert_eq!(app.zoom, 0);
+    press(&mut app, K::Enter);
     assert_eq!(app.file, Some(2));
     assert!(matches!(press(&mut app, K::Char('e')), Effect::None));
     press(&mut app, K::Char('c'));
@@ -3246,7 +3269,7 @@ fn file_tree_navigation_filters_mouse_and_layout() {
     );
     press(&mut app, K::Char('o'));
     assert!(!app.tree_rows.contains(&Leaf(2)));
-    // Click the collapsed directory row, then its nested directory, then a leaf.
+    // Directory clicks only select; explicit keys expand, and leaf clicks show diffs.
     let click = |app: &mut App, row: usize| {
         let rect = app.pane_rects[1];
         app.handle(Event::Mouse(MouseEvent {
@@ -3259,9 +3282,16 @@ fn file_tree_navigation_filters_mouse_and_layout() {
     };
     draw(&mut app, &mut terminal);
     click(&mut app, 1);
+    assert_eq!(app.tree_rows[app.cursor[1]], Directory("src".into()));
+    assert!(!app.tree_rows.contains(&Leaf(1)));
+    press(&mut app, K::Char('='));
     assert!(app.tree_rows.contains(&Leaf(1)));
     assert!(!app.tree_rows.contains(&Leaf(2)));
     draw(&mut app, &mut terminal);
+    click(&mut app, 3);
+    assert!(!app.tree_rows.contains(&Leaf(2)));
+    press(&mut app, K::Char('='));
+    assert_eq!(app.tree_rows, expanded);
     click(&mut app, 3);
     assert_eq!(app.tree_rows, expanded);
     draw(&mut app, &mut terminal);

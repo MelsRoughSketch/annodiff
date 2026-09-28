@@ -630,16 +630,20 @@ impl App {
         self.rebuild_comments();
         self.rebuild_commits();
     }
-    fn toggle_directory(&mut self) -> bool {
+    fn set_directory_expanded(&mut self, expand: Option<bool>) -> bool {
         let Some(FileRow::Directory(path)) = self.tree_rows.get(self.cursor[1]) else {
             return false;
         };
         if !self.queries[1].is_empty() || self.commented_files_only {
-            self.status = "Clear Files filters to collapse directories".into();
+            if expand != Some(true) {
+                self.status = "Clear Files filters to collapse directories".into();
+            }
             return true;
         }
         let path = path.clone();
-        if !self.collapsed_dirs.remove(&path) {
+        if expand.unwrap_or_else(|| self.collapsed_dirs.contains(&path)) {
+            self.collapsed_dirs.remove(&path);
+        } else {
             self.collapsed_dirs.insert(path);
         }
         self.manual_scroll[1] = false;
@@ -1674,13 +1678,6 @@ impl App {
                                     + mouse.row.saturating_sub(self.pane_rects[pane].y + 1)
                                         as usize;
                                 self.move_selection(1, Some(index));
-                                if pane == 1
-                                    && index < self.tree_rows.len()
-                                    && mouse.row > self.pane_rects[pane].y
-                                    && mouse.row < self.pane_rects[pane].bottom().saturating_sub(1)
-                                {
-                                    self.toggle_directory();
-                                }
                             }
                         }
                         _ => {}
@@ -1769,9 +1766,9 @@ impl App {
                 .into();
             }
             K::Char('+') if self.stacked || self.pane == 0 => self.zoom = 2,
-            K::Char('-') if self.stacked || self.pane == 0 => self.zoom = 0,
+            K::Char('_') if self.stacked || self.pane == 0 => self.zoom = 0,
             K::Char('+') => self.zoom = (self.zoom + 1).min(2),
-            K::Char('-') => self.zoom = self.zoom.saturating_sub(1),
+            K::Char('_') => self.zoom = self.zoom.saturating_sub(1),
             K::Char('{' | '}') if self.zoom < 2 => {
                 let step = if code == K::Char('}') { 5 } else { -5 };
                 self.set_sidebar_percent(self.sidebar_percent + step);
@@ -1909,7 +1906,7 @@ impl App {
             K::Char('e') if self.pane != 2 => return Ok(Effect::Editor),
             K::Enter => match self.pane {
                 1 => {
-                    if !self.toggle_directory() {
+                    if !self.set_directory_expanded(None) {
                         self.focus(0);
                     }
                 }
@@ -1925,9 +1922,12 @@ impl App {
                 }
                 _ => self.start_edit(self.selected_ref(), false)?,
             },
+            K::Char('-' | '=') if self.pane == 1 => {
+                self.set_directory_expanded(Some(code == K::Char('=')));
+            }
             K::Char(' ') if self.pane == 3 => self.select_commit()?,
             K::Char(' ') if self.pane == 1 => {
-                self.toggle_directory();
+                self.set_directory_expanded(None);
             }
             _ => {}
         }

@@ -126,9 +126,14 @@ fn list<'a, T: Clone + Into<Line<'a>>>(
         let y = rect.y + (line - *offset) as u16;
         let gutter = if marker { 2.min(rect.width) } else { 0 };
         let area = Rect::new(rect.x + gutter, y, rect.width - gutter, 1);
+        let row_background = if marker && focus && line == cursor {
+            Color::Rgb(32, 40, 48)
+        } else {
+            Color::Reset
+        };
         if marker && line == cursor && gutter > 0 {
             frame.render_widget(
-                Paragraph::new("▶").style(Style::default().fg(if focus {
+                Paragraph::new("▶").style(Style::default().bg(row_background).fg(if focus {
                     Color::Rgb(80, 220, 220)
                 } else {
                     Color::DarkGray
@@ -143,7 +148,13 @@ fn list<'a, T: Clone + Into<Line<'a>>>(
                 Style::default().fg(Color::Reset).bg(Color::Rgb(72, 72, 72))
             }
         } else {
-            Style::default().fg(Color::Reset)
+            Style::default()
+                .fg(if row_background != Color::Reset {
+                    Color::White
+                } else {
+                    Color::Reset
+                })
+                .bg(row_background)
         };
         let mut label: Line = label.clone().into();
         if marker && line == cursor {
@@ -319,7 +330,7 @@ pub fn draw(app: &mut App, frame: &mut Frame) {
                 "q: quit · ↑↓/PgUp/PgDn: scroll · Tab: pane · Enter/Ctrl+Enter/F2: send/copy · Esc: cancel"
             }
             Some(_) => "↑↓/PgUp/PgDn: scroll · Tab: pane · Esc: close",
-            None => "?: help · t: layout · 0/1/2/3: pane · h/l: pane/side · +/-: zoom · q: quit",
+            None => "?: help · t: layout · 0/1/2/3: pane · h/l: pane/side · +/_: zoom · q: quit",
         }
     };
     frame.render_widget(
@@ -1234,7 +1245,7 @@ Global
 h/l or ←→: focus previous/next pane or diff side
 Tab: move focus to the next pane
 t: switch side-by-side / stacked layout (stacked: 1/2/3 select top pane, 0 focuses Diff below)
-+/-: expand/shrink pane (Diff or stacked: normal / full; others: normal / tall / full)
++/_: expand/shrink pane (Diff or stacked: normal / full; others: normal / tall / full)
 {/}: grow/shrink pane 0 by 5% (shrink/grow panes 1–3; width in side-by-side, height in stacked); drag the sidebar/Diff border to resize
 Ctrl+Enter/F2: preview and send unsent Open comments
 r: reload diff and file/commit lists   R: choose Archive or Reset all comments   q: quit the app
@@ -1247,7 +1258,7 @@ n/N: jump to next/previous diff hunk   s: switch unified / side-by-side display 
 x: toggle selected comment Done / Open   d: delete the selected comment   e: edit a comment in your external editor
 
 Files
-Enter/Space or click a directory: expand/collapse; matching paths stay expanded while filtering
+-/=: collapse/expand directory; Enter/Space: toggle; click: select; matching paths stay expanded while filtering
 o: show all files / only files with matching comments
 u: filter Open / all comments (shared with Comments)
 /: filter files by path   n/N: jump to next/previous filtered file
@@ -1269,9 +1280,9 @@ First row: select to clear chosen commits
 
 fn help_lines(app: &App) -> Vec<Line<'static>> {
     let zoom_hint = if app.stacked || app.pane == 0 {
-        "+/-: expand/shrink pane (normal / full)"
+        "+/_: expand/shrink pane (normal / full)"
     } else {
-        "+/-: expand/shrink pane (normal / tall / full)"
+        "+/_: expand/shrink pane (normal / tall / full)"
     };
     let mut hints = Vec::new();
     hints.push("t: switch side-by-side / stacked layout; 1/2/3 select top pane in stacked layout");
@@ -1318,7 +1329,7 @@ fn help_lines(app: &App) -> Vec<Line<'static>> {
         _ => {
             if app.pane == 1 {
                 hints.extend([
-                    "Enter/Space/click directory: expand/collapse",
+                    "-/=: collapse/expand directory; Enter/Space: toggle; click: select",
                     "o: show all files / only commented files",
                     "u: filter Open / all comments (shared with Comments)",
                 ]);
