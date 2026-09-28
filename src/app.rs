@@ -406,7 +406,7 @@ impl App {
         let split = self.split();
         let view = &mut self.cache.iter_mut().find(|(i, _)| *i == file).unwrap().1;
         view.layout(self.diff_inner.width as usize, self.bias, self.wrap);
-        let display = if collapse { None } else { display }.or_else(|| {
+        let mut display = if collapse { None } else { display }.or_else(|| {
             source
                 .and_then(|i| view.visual_for_source(i, self.side))
                 .and_then(|row| view.display_source(row, self.side))
@@ -414,7 +414,7 @@ impl App {
         if full {
             view.context_visible = None;
         } else {
-            view.expand_near(display.unwrap_or(0));
+            display = view.expand_near(display.unwrap_or(0)).or(display);
         }
         view.rebuild_rows(&self.review.files[file], split);
         view.layout(self.diff_inner.width as usize, self.bias, self.wrap);

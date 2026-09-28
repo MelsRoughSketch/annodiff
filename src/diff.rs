@@ -333,7 +333,7 @@ impl FileView {
             Some(display)
         }
     }
-    pub fn expand_near(&mut self, display: usize) {
+    pub fn expand_near(&mut self, display: usize) -> Option<usize> {
         let file = self.expanded.as_ref().unwrap();
         let visible = self.context_visible.get_or_insert_with(|| {
             file.lines
@@ -342,24 +342,24 @@ impl FileView {
                 .map(|(i, l)| self.source_indices[i].is_some() || l.old == 0 && l.new == 0)
                 .collect()
         });
-        let Some(next) = (0..visible.len())
+        let next = (0..visible.len())
             .filter(|i| !visible[*i])
-            .min_by_key(|i| i.abs_diff(display))
-        else {
-            return;
-        };
+            .min_by_key(|i| i.abs_diff(display))?;
         let step = if next < display { -1 } else { 1 };
         let mut i = next;
+        let mut last = next;
         for _ in 0..10 {
             if visible[i] {
                 break;
             }
             visible[i] = true;
+            last = i;
             let Some(next) = i.checked_add_signed(step).filter(|i| *i < visible.len()) else {
                 break;
             };
             i = next;
         }
+        Some(last)
     }
     fn rebuild_display_rows(&mut self, file: &File, split: bool) {
         self.split = split;

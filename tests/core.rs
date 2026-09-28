@@ -254,6 +254,39 @@ fn initial_context_gaps_match_the_compared_file_boundaries() {
             assert_eq!(rows.starts_with(&gaps), leading, "line {line}");
             assert_eq!(rows.ends_with(&gaps), trailing, "line {line}");
             assert!(app.view().unwrap().expanded.is_none());
+            if line == 15 {
+                app.focus(0);
+                app.side = usize::from(split);
+                let mut terminal = Terminal::new(TestBackend::new(120, 12)).unwrap();
+                for (start, expected) in [(12, [2, 1]), (18, [28, 30])] {
+                    if app.view().unwrap().expanded.is_some() {
+                        press(&mut app, K::Char('Z'));
+                    }
+                    draw(&mut app, &mut terminal);
+                    let source = app.review.files[0]
+                        .lines
+                        .iter()
+                        .position(|l| l.old == start)
+                        .unwrap();
+                    app.cursor[0] = app
+                        .view()
+                        .unwrap()
+                        .visual_for_source(source, app.side)
+                        .unwrap();
+                    app.offset = app.cursor[0].saturating_sub(3);
+                    for number in expected {
+                        let screen_row = app.cursor[0].saturating_sub(app.offset);
+                        press(&mut app, K::Char('z'));
+                        let view = app.view().unwrap();
+                        let display = view.display_source(app.cursor[0], app.side).unwrap();
+                        assert_eq!(view.expanded.as_ref().unwrap().lines[display].old, number);
+                        assert_eq!(app.offset, app.cursor[0].saturating_sub(screen_row));
+                        draw(&mut app, &mut terminal);
+                        assert!(app.cursor[0] >= app.offset);
+                        assert!(app.cursor[0] < app.offset + usize::from(app.diff_inner.height));
+                    }
+                }
+            }
         }
     }
 }
@@ -350,6 +383,11 @@ fn file_expand_preserves_diff_comments_and_supports_full_file_navigation() {
             .unwrap();
         let hunks = app.view().unwrap().hunk_rows.clone().map(|rows| rows.len());
         for count in [10, 20] {
+            app.cursor[0] = app
+                .view()
+                .unwrap()
+                .visual_for_source(source, app.side)
+                .unwrap();
             press(&mut app, K::Char('z'));
             draw(&mut app, &mut terminal);
             let view = app.view().unwrap();
@@ -368,7 +406,8 @@ fn file_expand_preserves_diff_comments_and_supports_full_file_navigation() {
                     .iter()
                     .any(|i| view.code[*i].text.starts_with("line 80:"))
             );
-            assert_eq!(view.source(app.cursor[0], app.side), Some(source));
+            assert_eq!(view.source(app.cursor[0], app.side), None);
+            assert!(view.display_source(app.cursor[0], app.side).is_some());
             assert!(view.rows.iter().any(|row| matches!(row, Row::Gap(true))));
             for (row, item) in view.rows.iter().enumerate() {
                 if *item == Row::Gap(true) {
@@ -376,7 +415,7 @@ fn file_expand_preserves_diff_comments_and_supports_full_file_navigation() {
                     assert_eq!(view.rows.get(row + 1), Some(&Row::Gap(false)));
                 }
             }
-            assert_eq!(app.selected_ref().unwrap().comment, 0);
+            assert!(app.selected_ref().is_none());
         }
         let visibility = app.view().unwrap().context_visible.clone();
         app.set_split(!split).unwrap();
