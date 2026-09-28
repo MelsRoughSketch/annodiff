@@ -1133,9 +1133,13 @@ fn session_directory_scope_combines_with_search_and_selects_visible_session() {
     // Tab focus must be visible across the whole filter label, not just a marker.
     let assert_focus =
         |terminal: &Terminal<TestBackend>, active: Option<usize>| {
-            for (i, label) in ["[CWD] / All", "[Active] / Archived", "[Updated] / Created"]
-                .iter()
-                .enumerate()
+            for (i, label) in [
+                "Filter: [CWD] / All",
+                "Status: [Active] / Archived",
+                "Sort: [Updated] / Created",
+            ]
+            .iter()
+            .enumerate()
             {
                 let cells = terminal
                     .backend()
@@ -1160,7 +1164,7 @@ fn session_directory_scope_combines_with_search_and_selects_visible_session() {
     assert_focus(&terminal, None);
     press(&mut app, K::Tab);
     draw(&mut app, &mut terminal);
-    assert!(screen(&terminal).contains("[CWD] / All"));
+    assert!(screen(&terminal).contains("Filter: [CWD] / All"));
     assert!(screen(&terminal).contains("2 sessions"));
     assert!(screen(&terminal).contains("[here] Fix linked"));
     assert!(!screen(&terminal).contains("Fix elsewhere"));
@@ -1187,7 +1191,7 @@ fn session_directory_scope_combines_with_search_and_selects_visible_session() {
         control: 0,
     });
     draw(&mut app, &mut terminal);
-    assert!(screen(&terminal).contains("CWD / [All]"));
+    assert!(screen(&terminal).contains("Filter: CWD / [All]"));
     assert!(screen(&terminal).contains("Fix elsewhere"));
     press(&mut app, K::Char('/'));
     press(&mut app, K::Char('a'));
@@ -2841,9 +2845,9 @@ fn session_picker_sort_and_archived_reload_preserve_filters() {
         "Search Codex sessions",
         "find",
         "Destination",
-        "CWD / [All]",
-        "Active / [Archived]",
-        "Updated / [Created]",
+        "Filter: CWD / [All]",
+        "Status: Active / [Archived]",
+        "Sort: Updated / [Created]",
         "Loading sessions…",
     ] {
         assert!(loading_screen.contains(label), "missing {label}");
@@ -2861,7 +2865,11 @@ fn session_picker_sort_and_archived_reload_preserve_filters() {
         .iter()
         .map(|c| c.symbol())
         .collect();
-    for label in ["CWD / [All]", "Active / [Archived]", "Updated / [Created]"] {
+    for label in [
+        "Filter: CWD / [All]",
+        "Status: Active / [Archived]",
+        "Sort: Updated / [Created]",
+    ] {
         assert!(screen.contains(label));
     }
     press(&mut app, K::Down);

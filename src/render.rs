@@ -987,19 +987,19 @@ fn draw_modal(
             );
             let filters = [
                 if options.all {
-                    "CWD / [All]"
+                    "Filter: CWD / [All]"
                 } else {
-                    "[CWD] / All"
+                    "Filter: [CWD] / All"
                 },
                 if options.archived {
-                    "Active / [Archived]"
+                    "Status: Active / [Archived]"
                 } else {
-                    "[Active] / Archived"
+                    "Status: [Active] / Archived"
                 },
                 if options.created {
-                    "Updated / [Created]"
+                    "Sort: Updated / [Created]"
                 } else {
-                    "[Updated] / Created"
+                    "Sort: [Updated] / Created"
                 },
             ];
             let mut title = vec![Span::raw(" Destination · ")];
