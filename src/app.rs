@@ -1690,7 +1690,7 @@ impl App {
                                 if index >= self.labels[pane].len() {
                                     return Ok(Effect::None);
                                 }
-                                let activate = focused && self.cursor[pane] == index;
+                                let activate = pane == 3 || focused && self.cursor[pane] == index;
                                 self.move_selection(1, Some(index));
                                 if activate {
                                     let key = match pane {
@@ -1701,7 +1701,7 @@ impl App {
                                         {
                                             K::Char('c')
                                         }
-                                        2 => K::Enter,
+                                        2 | 3 => K::Enter,
                                         _ => return Ok(Effect::None),
                                     };
                                     return self.handle(Event::Key(KeyEvent::new(key, M::NONE)));
