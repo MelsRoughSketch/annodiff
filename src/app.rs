@@ -1644,6 +1644,7 @@ impl App {
                             self.manual_scroll[pane] = true;
                         }
                         MouseEventKind::Down(MouseButton::Left) => {
+                            let focused = self.pane == pane;
                             self.focus(pane);
                             if pane == 0 {
                                 if !self.diff_inner.contains((mouse.column, mouse.row).into()) {
@@ -1677,10 +1678,34 @@ impl App {
                                     self.drag_start = Some((self.cursor[0], side));
                                 }
                             } else {
+                                if !self.pane_rects[pane]
+                                    .inner(ratatui::layout::Margin::new(1, 1))
+                                    .contains((mouse.column, mouse.row).into())
+                                {
+                                    return Ok(Effect::None);
+                                }
                                 let index = self.list_offsets[pane]
                                     + mouse.row.saturating_sub(self.pane_rects[pane].y + 1)
                                         as usize;
+                                if index >= self.labels[pane].len() {
+                                    return Ok(Effect::None);
+                                }
+                                let activate = focused && self.cursor[pane] == index;
                                 self.move_selection(1, Some(index));
+                                if activate {
+                                    let key = match pane {
+                                        1 if matches!(
+                                            self.tree_rows.get(index),
+                                            Some(FileRow::File(_))
+                                        ) =>
+                                        {
+                                            K::Char('c')
+                                        }
+                                        2 => K::Enter,
+                                        _ => return Ok(Effect::None),
+                                    };
+                                    return self.handle(Event::Key(KeyEvent::new(key, M::NONE)));
+                                }
                             }
                         }
                         _ => {}
