@@ -1483,6 +1483,117 @@ fn diff_drag_selects_rows_on_starting_side_and_keeps_range_after_release() {
 }
 
 #[test]
+fn stacked_layout_focus_zoom_resize_and_state() {
+    use crossterm::event::{MouseButton, MouseEvent, MouseEventKind};
+    let dir = tempfile::tempdir().unwrap();
+    let mut app = App::new(
+        Review {
+            files: vec![fixture()],
+            ..Default::default()
+        },
+        dir.path().join("state.json"),
+    );
+    let mut terminal = Terminal::new(TestBackend::new(60, 102)).unwrap();
+    let saved = app.review.clone();
+    app.focus(0);
+    draw(&mut app, &mut terminal);
+    press(&mut app, K::Char('v'));
+    press(&mut app, K::Down);
+    let selection = app.bounds();
+    press(&mut app, K::Char('t'));
+    for pane in ['1', '2', '3', '0'] {
+        press(&mut app, K::Char(pane));
+        draw(&mut app, &mut terminal);
+        assert!(app.stacked);
+        assert_eq!(app.pane_rects[0], ratatui::layout::Rect::new(0, 30, 60, 70));
+        assert_eq!(
+            app.pane_rects[app.left_pane],
+            ratatui::layout::Rect::new(0, 0, 60, 30)
+        );
+        assert_eq!(app.pane_rects.iter().filter(|r| !r.is_empty()).count(), 2);
+        assert_eq!(app.bounds(), selection);
+        press(&mut app, K::Char('}'));
+        draw(&mut app, &mut terminal);
+        assert_eq!(
+            app.pane_rects[app.pane].height,
+            if pane == '0' { 75 } else { 35 }
+        );
+        press(&mut app, K::Char('{'));
+        press(&mut app, K::Char('+'));
+        draw(&mut app, &mut terminal);
+        assert_eq!(
+            app.pane_rects[app.pane],
+            ratatui::layout::Rect::new(0, 0, 60, 100)
+        );
+        assert_eq!(app.pane_rects.iter().filter(|r| !r.is_empty()).count(), 1);
+        press(&mut app, K::Char('-'));
+        assert_eq!(app.zoom, 0);
+    }
+    let mouse = |kind, x, y| {
+        Event::Mouse(MouseEvent {
+            kind,
+            column: x,
+            row: y,
+            modifiers: M::NONE,
+        })
+    };
+    for edge in [29, 30] {
+        app.sidebar_percent = 30;
+        draw(&mut app, &mut terminal);
+        app.handle(mouse(MouseEventKind::Down(MouseButton::Left), 1, edge))
+            .unwrap();
+        app.handle(mouse(
+            MouseEventKind::Drag(MouseButton::Left),
+            55,
+            edge + 10,
+        ))
+        .unwrap();
+        draw(&mut app, &mut terminal);
+        assert_eq!(app.sidebar_percent, 40);
+        assert_eq!(app.pane_rects[0].y, 40);
+        assert_eq!(app.bounds(), selection);
+        app.handle(mouse(MouseEventKind::Up(MouseButton::Left), 1, 99))
+            .unwrap();
+        assert_eq!(app.sidebar_percent, 90);
+        app.handle(mouse(MouseEventKind::Drag(MouseButton::Left), 1, 0))
+            .unwrap();
+        assert_eq!(app.sidebar_percent, 90);
+    }
+    app.sidebar_percent = 30;
+    draw(&mut app, &mut terminal);
+    assert_eq!(app.review, saved);
+    // Mode controls share the horizontal border and must remain clickable.
+    let mode = app.diff_mode_rects[1];
+    assert!(!mode.is_empty());
+    app.handle(mouse(
+        MouseEventKind::Down(MouseButton::Left),
+        mode.x,
+        mode.y,
+    ))
+    .unwrap();
+    assert!(app.review.split);
+    draw(&mut app, &mut terminal);
+    press(&mut app, K::Char('t'));
+    draw(&mut app, &mut terminal);
+    assert!(!app.stacked);
+    assert_eq!(app.pane_rects[0].x, 18);
+    assert_eq!(app.pane_rects.iter().filter(|r| !r.is_empty()).count(), 4);
+    press(&mut app, K::Char('/'));
+    press(&mut app, K::Char('t'));
+    assert!(!app.stacked);
+    press(&mut app, K::Esc);
+    press(&mut app, K::Char('t'));
+    for (width, height) in [(1, 1), (3, 2), (10, 4), (40, 80)] {
+        app.handle(Event::Resize(width, height)).unwrap();
+        terminal.backend_mut().resize(width, height);
+        terminal
+            .resize(ratatui::layout::Rect::new(0, 0, width, height))
+            .unwrap();
+        draw(&mut app, &mut terminal);
+    }
+}
+
+#[test]
 fn pane_width_keys_follow_focus_and_preserve_zoom_and_selection() {
     let dir = tempfile::tempdir().unwrap();
     for split in [false, true] {
