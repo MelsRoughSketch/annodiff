@@ -256,7 +256,7 @@ impl App {
         }
         let source = self
             .view()
-            .and_then(|v| v.source(self.cursor[0], self.side));
+            .and_then(|v| v.display_source(self.cursor[0], self.side));
         let previous = self.review.split;
         self.review.split = split;
         if let Err(error) = self.review.save(&self.state) {
@@ -272,7 +272,7 @@ impl App {
         }
         self.layout_diff(self.diff_inner.width as usize);
         if let (Some(source), Some(v)) = (source, self.view())
-            && let Some(row) = v.visual_for_source(source, self.side)
+            && let Some(row) = v.visual_for_display(source, self.side)
         {
             self.cursor[0] = row;
         }
@@ -341,6 +341,40 @@ impl App {
         if !self.split() {
             self.side = 0;
         }
+    }
+    pub fn toggle_expand(&mut self) -> Result<()> {
+        self.ensure_view();
+        let file = self.file.context("no selected file")?;
+        let view = self.view().unwrap();
+        let expanded = view.expanded.is_some();
+        let source = view.source(self.cursor[0], self.side).or_else(|| {
+            (self.cursor[0]..view.len())
+                .chain((0..self.cursor[0]).rev())
+                .find_map(|row| view.source(row, self.side))
+        });
+        let anchor = self
+            .anchor
+            .and_then(|(row, side)| Some((view.source(row, side)?, side)));
+        let f = &self.review.files[file];
+        let mut next = if expanded {
+            FileView::new(f, self.split())
+        } else {
+            FileView::expand(f, review::expand_file(&self.review, f)?, self.split())?
+        };
+        next.layout(self.diff_inner.width as usize, self.bias, self.wrap);
+        self.cursor[0] = source
+            .and_then(|i| next.visual_for_source(i, self.side))
+            .unwrap_or(0);
+        self.anchor = anchor.and_then(|(i, side)| Some((next.visual_for_source(i, side)?, side)));
+        self.offset = self.cursor[0].saturating_sub(self.diff_inner.height as usize / 2);
+        *self.view_mut().unwrap() = next;
+        self.status = if expanded {
+            "Diff context restored"
+        } else {
+            "Full file · z: collapse · expanded context is read-only"
+        }
+        .into();
+        Ok(())
     }
     pub fn layout_diff(&mut self, width: usize) {
         self.ensure_view();
@@ -617,7 +651,7 @@ impl App {
                 comment: index,
             });
         }
-        let source = view.source(self.cursor[0], self.side)?;
+        let source = view.display_source(self.cursor[0], self.side)?;
         view.comments[source][self.side].map(|comment| CommentRef {
             history: false,
             file,
@@ -873,7 +907,7 @@ impl App {
         } else {
             let (start, end) = self
                 .bounds()
-                .context("select a source line, not an empty alignment cell")?;
+                .context("select a line in the original diff; expanded context is read-only")?;
             ensure!(
                 f.lines[start..=end].iter().any(|l| l.old > 0 || l.new > 0),
                 "select a source line inside a diff hunk"
@@ -1021,7 +1055,7 @@ impl App {
             let index =
                 (current as isize + step * offset as isize).rem_euclid(count as isize) as usize;
             let (row, side) = (index / sides, index % sides);
-            if let Some(i) = view.source(row, side)
+            if let Some(i) = view.display_source(row, side)
                 && view.code[i].text.to_lowercase().contains(&query)
             {
                 self.cursor[0] = row;
@@ -1425,7 +1459,7 @@ impl App {
             return Ok(Effect::None);
         }
         match key.code {
-            K::Char('f' | '[' | ']') => self.focus(0),
+            K::Char('f' | 'z' | '[' | ']') => self.focus(0),
             K::Char('v' | 'x' | 'd') if self.pane != 2 => self.focus(0),
             K::Char('c' | 'e') if self.pane == 2 || self.pane == 3 => self.focus(0),
             K::Char('n' | 'N')
@@ -1516,6 +1550,7 @@ impl App {
                 }
             }
             K::Char('s') => self.set_split(!self.review.split)?,
+            K::Char('z') => self.toggle_expand()?,
             K::Char('f') => {
                 self.focus(0);
                 self.wrap = !self.wrap;

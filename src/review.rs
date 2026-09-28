@@ -486,6 +486,69 @@ fn diff_file(path: &str, bytes: Vec<u8>) -> File {
     }
 }
 
+pub fn expand_file(review: &Review, file: &File) -> Result<File> {
+    ensure!(local_path(&file.path), "invalid file path");
+    ensure!(
+        file.lines.iter().any(|l| l.old > 0 || l.new > 0),
+        "This diff has no text to expand"
+    );
+    // Added/deleted files already contain their entire text, including untracked files.
+    if file
+        .patch
+        .lines()
+        .any(|l| l == "--- /dev/null" || l == "+++ /dev/null")
+    {
+        return Ok(file.clone());
+    }
+    ensure!(
+        !review.base.starts_with('-') && !review.target.starts_with('-'),
+        "invalid revision"
+    );
+    let mut args = vec![
+        "-c",
+        "core.quotePath=false",
+        "-c",
+        "diff.suppressBlankEmpty=false",
+        "diff",
+        "--no-color",
+        "--no-ext-diff",
+        "--no-textconv",
+        "--no-renames",
+        "--output-indicator-new=+",
+        "--output-indicator-old=-",
+        "--output-indicator-context= ",
+        "--unified=2147483647",
+        if review.base.is_empty() {
+            "HEAD"
+        } else {
+            &review.base
+        },
+    ];
+    if !review.target.is_empty() {
+        args.push(&review.target);
+    }
+    let path = format!(":(literal){}", file.path);
+    args.extend(["--", &path]);
+    // ponytail: load full context on demand; stream it if very large files become a bottleneck.
+    let patch = String::from_utf8(git(&review.root, &args)?)?;
+    let index = |patch: &str| {
+        patch
+            .lines()
+            .find(|l| l.starts_with("index "))
+            .map(str::to_owned)
+    };
+    ensure!(
+        index(&file.patch) == index(&patch),
+        "File changed since this diff was loaded; press r to refresh before expanding"
+    );
+    Ok(File {
+        path: file.path.clone(),
+        lines: parse(&patch),
+        patch,
+        comments: Vec::new(),
+    })
+}
+
 pub fn snapshot(root: &str, base: &str, target: &str) -> Result<Review> {
     let resolve = |s: &str| -> Result<String> {
         if s.is_empty() {

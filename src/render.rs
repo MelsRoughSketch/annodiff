@@ -382,6 +382,9 @@ fn draw_diff(app: &mut App, frame: &mut Frame) {
     } else {
         format!(" · /{} ", app.queries[0])
     }));
+    if app.view().is_some_and(|v| v.expanded.is_some()) {
+        spans.push(Span::raw(" · full file · z: collapse "));
+    }
     let border = block(Line::from(spans), app.pane == 0);
     app.diff_inner = border.inner(rect);
     frame.render_widget(border, rect);
@@ -434,7 +437,7 @@ fn draw_diff(app: &mut App, frame: &mut Frame) {
         app.highlight_pending = view.highlight_visible(&app.review.files[file], app.offset, height);
     }
     let view = app.view().unwrap();
-    let f = &app.review.files[file];
+    let f = view.expanded.as_ref().unwrap_or(&app.review.files[file]);
     if view.is_empty() && app.editor.is_none() {
         text(
             frame,
@@ -470,7 +473,7 @@ fn draw_diff(app: &mut App, frame: &mut Frame) {
             Row::Gap(label) => {
                 if label {
                     frame.render_widget(
-                        Paragraph::new("⋯ unchanged lines omitted ⋯")
+                        Paragraph::new("⋯ unchanged lines omitted · z: expand file ⋯")
                             .style(Style::default().fg(Color::DarkGray)),
                         area,
                     );
@@ -709,7 +712,11 @@ fn background(
     }
     if app.anchor.is_some()
         && side == app.side
-        && bounds.is_some_and(|(a, b)| index >= a && index <= b)
+        && bounds.is_some_and(|(a, b)| {
+            app.view()
+                .and_then(|v| v.original_source(index))
+                .is_some_and(|i| i >= a && i <= b)
+        })
     {
         style = style.bg(Color::Rgb(55, 62, 68));
     }
@@ -1122,6 +1129,7 @@ Ctrl+Enter/F2: preview and send unsent Open comments
 r: reload diff and file/commit lists   R: choose Archive or Reset all comments   q: quit the app
 
 Diff
+z: expand/collapse the full file (additional context is read-only)
 n/N: jump to next/previous diff hunk   s: switch unified / side-by-side display   f: toggle wrapping of long diff lines
 [: widen NEW side, narrow OLD side   ]: widen OLD side, narrow NEW side
 /: search text in the current diff   v: start/clear range; extend with j/k   c/Enter: add a comment to selected lines
@@ -1243,6 +1251,7 @@ fn help_lines(app: &App) -> Vec<Line<'static>> {
                 }
                 hints.extend([
                     "s: switch unified / side-by-side display",
+                    "z: expand/collapse the full file (additional context is read-only)",
                     if app.wrap {
                         "f: disable wrapping of long diff lines"
                     } else {

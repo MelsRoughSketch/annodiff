@@ -198,6 +198,204 @@ fn prompt_filters_status_side_and_fences() {
 }
 
 #[test]
+fn file_expand_preserves_diff_comments_and_supports_full_file_navigation() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    let path = "日本語 [x]\nfile.go";
+    git(root, &["init", "-q"]);
+    let original: String = (1..=80)
+        .map(|i| format!("line {i}: unchanged context that wraps in a narrow terminal\n"))
+        .collect();
+    fs::write(root.join(path), &original).unwrap();
+    git(root, &["add", "."]);
+    git(
+        root,
+        &[
+            "-c",
+            "user.name=Test",
+            "-c",
+            "user.email=t@x",
+            "-c",
+            "commit.gpgsign=false",
+            "commit",
+            "-qm",
+            "base",
+        ],
+    );
+    let base = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+    let modified = original
+        .replace("line 20:", "changed 20:")
+        .replace("line 40:", "inserted\nline 40:")
+        .replace("line 60:", "changed 60:");
+    fs::write(root.join(path), &modified).unwrap();
+    let working = review::snapshot(root.to_str().unwrap(), "", "").unwrap();
+    git(root, &["add", "."]);
+    git(
+        root,
+        &[
+            "-c",
+            "user.name=Test",
+            "-c",
+            "user.email=t@x",
+            "-c",
+            "commit.gpgsign=false",
+            "commit",
+            "-qm",
+            "target",
+        ],
+    );
+    let revision = review::snapshot(root.to_str().unwrap(), &base, "HEAD").unwrap();
+    // Revision expansion must read the compared revisions, not the current worktree.
+    fs::write(root.join(path), "unrelated worktree content\n").unwrap();
+    for (mut review, split) in [
+        (revision.clone(), false),
+        (revision, true),
+        (working, false),
+    ] {
+        if review.base.is_empty() {
+            git(root, &["reset", "--soft", &base]);
+            fs::write(root.join(path), &modified).unwrap();
+        }
+        review.split = split;
+        let source = review.files[0]
+            .lines
+            .iter()
+            .position(|l| l.new > 0 && l.text.starts_with("+changed 20:"))
+            .unwrap();
+        review.files[0].comments.push(Comment {
+            start: source,
+            end: source,
+            text: "original note".into(),
+            side: if split { "new" } else { "" }.into(),
+            ..Default::default()
+        });
+        let saved = review.clone();
+        let state = root.join(".git/expand-state.json");
+        review.save(&state).unwrap();
+        let saved_bytes = fs::read(&state).unwrap();
+        let mut app = App::new(review, state.clone());
+        let mut terminal = Terminal::new(TestBackend::new(100, 30)).unwrap();
+        app.focus(0);
+        app.side = usize::from(split);
+        app.wrap = true;
+        draw(&mut app, &mut terminal);
+        app.cursor[0] = app
+            .view()
+            .unwrap()
+            .visual_for_source(source, app.side)
+            .unwrap();
+        let hunks = app.view().unwrap().hunk_rows.clone().map(|rows| rows.len());
+        press(&mut app, K::Char('z'));
+        draw(&mut app, &mut terminal);
+        assert_eq!(
+            app.view().unwrap().source(app.cursor[0], app.side),
+            Some(source)
+        );
+        assert_eq!(app.selected_ref().unwrap().comment, 0);
+        assert_eq!(
+            app.view().unwrap().hunk_rows.clone().map(|rows| rows.len()),
+            hunks
+        );
+        let full = app.view().unwrap().expanded.as_ref().unwrap();
+        for number in [1, 40, 80] {
+            assert!(
+                full.lines
+                    .iter()
+                    .any(|l| l.text.contains(&format!("line {number}:")))
+            );
+        }
+        assert_eq!(app.review, saved);
+        assert_eq!(fs::read(&state).unwrap(), saved_bytes);
+        app.filter(0, "line 1:".into());
+        assert!(
+            app.view()
+                .unwrap()
+                .source(app.cursor[0], app.side)
+                .is_none()
+        );
+        assert!(app.start_edit(None, false).is_err());
+        app.set_split(!split).unwrap();
+        draw(&mut app, &mut terminal);
+        let v = app.view().unwrap();
+        assert!(
+            v.code[v.display_source(app.cursor[0], app.side).unwrap()]
+                .text
+                .starts_with("line 1:")
+        );
+        press(&mut app, K::End);
+        draw(&mut app, &mut terminal);
+        let v = app.view().unwrap();
+        assert!(
+            v.code[v.display_source(app.cursor[0], app.side).unwrap()]
+                .text
+                .starts_with("line 80:")
+        );
+        app.set_split(split).unwrap();
+        app.side = usize::from(split);
+        app.cursor[0] = app
+            .view()
+            .unwrap()
+            .visual_for_source(source, app.side)
+            .unwrap();
+        app.start_edit(app.selected_ref(), false).unwrap();
+        app.editor.as_mut().unwrap().input.insert_str(" edited");
+        app.save_editor().unwrap();
+        draw(&mut app, &mut terminal);
+        assert!(app.view().unwrap().expanded.is_some());
+        let updated = Review::load(&state).unwrap();
+        assert_eq!(updated.files[0].patch, saved.files[0].patch);
+        assert_eq!(updated.files[0].lines, saved.files[0].lines);
+        assert_eq!(updated.files[0].comments[0].start, source);
+        assert!(updated.prompt().contains("changed 20:"));
+        press(&mut app, K::Char('z'));
+        draw(&mut app, &mut terminal);
+        assert!(app.view().unwrap().expanded.is_none());
+        assert_eq!(
+            app.view().unwrap().source(app.cursor[0], app.side),
+            Some(source)
+        );
+    }
+    let snapshot = review::snapshot(root.to_str().unwrap(), "", "").unwrap();
+    fs::write(
+        root.join(path),
+        modified.replace("line 1:", "edited after snapshot:"),
+    )
+    .unwrap();
+    let mut app = App::new(snapshot.clone(), root.join(".git/stale.json"));
+    assert!(
+        app.toggle_expand()
+            .unwrap_err()
+            .to_string()
+            .contains("refresh")
+    );
+    assert!(app.view().unwrap().expanded.is_none());
+    assert_eq!(app.review, snapshot);
+    // An insertion-only hunk with zero context is not necessarily a new file.
+    git(root, &["config", "diff.context", "0"]);
+    fs::write(
+        root.join(path),
+        original.replace("line 40:", "inserted\nline 40:"),
+    )
+    .unwrap();
+    let mut snapshot = review::snapshot(root.to_str().unwrap(), "", "").unwrap();
+    let f = &snapshot.files[0];
+    assert!(!f.lines.iter().any(|l| l.old > 0));
+    let full = review::expand_file(&snapshot, f).unwrap();
+    assert!(full.lines.iter().any(|l| l.old == 1 && l.new == 1));
+    assert!(FileView::expand(f, full, false).is_ok());
+    fs::write(root.join("added.txt"), "new file\n").unwrap();
+    fs::remove_file(root.join(path)).unwrap();
+    snapshot = review::snapshot(root.to_str().unwrap(), "", "").unwrap();
+    for f in &snapshot.files {
+        let full = review::expand_file(&snapshot, f).unwrap();
+        assert_eq!(full.lines, f.lines);
+        assert!(FileView::expand(f, full, true).is_ok());
+    }
+    let binary = file("Binary files a/x and b/x differ\n");
+    assert!(review::expand_file(&snapshot, &binary).is_err());
+}
+
+#[test]
 fn commit_selection_survives_non_utf8_diff_content() {
     let dir = tempfile::tempdir().unwrap();
     let root = dir.path();
