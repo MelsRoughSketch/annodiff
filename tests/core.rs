@@ -444,6 +444,90 @@ fn file_expand_preserves_diff_comments_and_supports_full_file_navigation() {
 }
 
 #[test]
+fn commit_click_matches_keyboard_selection_after_scrolling() {
+    use crossterm::event::{MouseButton, MouseEvent, MouseEventKind};
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    git(root, &["init", "-q"]);
+    for i in 0..8 {
+        fs::write(root.join("file.txt"), format!("revision {i}\n")).unwrap();
+        git(root, &["add", "."]);
+        git(
+            root,
+            &[
+                "-c",
+                "user.name=Test",
+                "-c",
+                "user.email=t@x",
+                "-c",
+                "commit.gpgsign=false",
+                "commit",
+                "-qm",
+                "revision",
+            ],
+        );
+    }
+    fs::write(root.join("file.txt"), "working tree\n").unwrap();
+    let snapshot = review::snapshot(root.to_str().unwrap(), "", "").unwrap();
+    let mut mouse_app = App::new(snapshot.clone(), root.join(".git/mouse.json"));
+    let mut keyboard = App::new(snapshot, root.join(".git/keyboard.json"));
+    for app in [&mut mouse_app, &mut keyboard] {
+        app.commits = review::commits(root.to_str().unwrap()).unwrap();
+        app.rebuild_lists();
+        app.focus(0);
+    }
+    let mut terminal = Terminal::new(TestBackend::new(120, 24)).unwrap();
+    draw(&mut mouse_app, &mut terminal);
+    let mouse = |app: &mut App, kind, row| {
+        app.handle(Event::Mouse(MouseEvent {
+            kind,
+            column: app.pane_rects[3].x + 2,
+            row,
+            modifiers: M::NONE,
+        }))
+        .unwrap();
+    };
+    let y = mouse_app.pane_rects[3].y + 1;
+    mouse(&mut mouse_app, MouseEventKind::ScrollDown, y);
+    draw(&mut mouse_app, &mut terminal);
+    let index = mouse_app.list_offsets[3];
+    assert!(index > 0);
+    assert!(mouse_app.review.base.is_empty());
+    let selected = mouse_app.commits[mouse_app.commit_rows[index].unwrap()]
+        .id
+        .clone();
+    for key in [K::Enter, K::Char(' ')] {
+        mouse(&mut mouse_app, MouseEventKind::Down(MouseButton::Left), y);
+        keyboard.focus(3);
+        keyboard.move_selection(1, Some(index));
+        press(&mut keyboard, key);
+        assert_eq!(mouse_app.pane, 3);
+        assert_eq!(mouse_app.cursor[3], index);
+        assert!(mouse_app.review.same_diff(&keyboard.review));
+        assert_eq!(mouse_app.review.base, keyboard.review.base);
+        assert_eq!(mouse_app.review.target, keyboard.review.target);
+        assert_eq!(mouse_app.labels[3], keyboard.labels[3]);
+        if key == K::Enter {
+            assert_eq!(mouse_app.review.base, selected);
+            assert!(mouse_app.labels[3][index].to_string().contains("[x]"));
+        } else {
+            assert!(mouse_app.review.base.is_empty());
+            assert!(mouse_app.labels[3][index].to_string().contains("[ ]"));
+        }
+    }
+    terminal.backend_mut().resize(120, 60);
+    draw(&mut mouse_app, &mut terminal);
+    let rect = mouse_app.pane_rects[3];
+    let cursor = mouse_app.cursor[3];
+    for row in [rect.y, rect.bottom() - 1, rect.bottom() - 2] {
+        mouse(&mut mouse_app, MouseEventKind::Down(MouseButton::Left), row);
+        assert_eq!(mouse_app.cursor[3], cursor);
+        assert!(mouse_app.review.base.is_empty());
+        assert!(mouse_app.review.target.is_empty());
+    }
+}
+
+#[test]
 fn commit_selection_survives_non_utf8_diff_content() {
     let dir = tempfile::tempdir().unwrap();
     let root = dir.path();
