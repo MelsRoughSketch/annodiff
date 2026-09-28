@@ -867,18 +867,6 @@ fn draw_modal(
                 );
             }
         }
-        Modal::Loading { .. } => {
-            let rect = centered(area, 60, 5);
-            frame.render_widget(Clear, rect);
-            let inner = bordered(frame, rect, " Codex ".into(), true);
-            text(
-                frame,
-                inner,
-                "Loading sessions…\nEsc: cancel · c: copy review to clipboard",
-                0,
-                true,
-            );
-        }
         Modal::Confirm { action, choice } => {
             let rect = centered(area, 76, 10);
             frame.render_widget(Clear, rect);
@@ -933,14 +921,41 @@ fn draw_modal(
             frame.render_widget(Clear, area);
             inspection(frame, area, value);
         }
-        Modal::Sessions {
-            items,
-            input,
-            selection,
-            search,
-            options,
-            control,
-        } => {
+        Modal::Sessions { .. } | Modal::Loading { .. } => {
+            let mut loading_selection = 0;
+            let (items, input, selection, search, options, control, loading) = match modal {
+                Modal::Sessions {
+                    items,
+                    input,
+                    selection,
+                    search,
+                    options,
+                    control,
+                } => (
+                    items.as_slice(),
+                    input,
+                    selection,
+                    *search,
+                    options,
+                    control,
+                    false,
+                ),
+                Modal::Loading {
+                    input,
+                    options,
+                    control,
+                    ..
+                } => (
+                    &[][..],
+                    input,
+                    &mut loading_selection,
+                    false,
+                    options,
+                    control,
+                    true,
+                ),
+                _ => unreachable!(),
+            };
             frame.render_widget(Clear, area);
             let query = input.lines().join(" ").to_lowercase();
             let mut labels = vec![
@@ -962,7 +977,7 @@ fn draw_modal(
             );
             *selection = (*selection).min(labels.len().saturating_sub(1));
             let search_area = Rect::new(area.x, area.y, area.width, 3.min(area.height));
-            input.set_block(block(" Search Codex sessions ", *search));
+            input.set_block(block(" Search Codex sessions ", search));
             frame.render_widget(&*input, search_area);
             let list_area = Rect::new(
                 area.x,
@@ -974,7 +989,7 @@ fn draw_modal(
                 frame,
                 list_area,
                 format!(
-                    " Destination · {}{} · {}{} · {}{} · {} sessions ",
+                    " Destination · {}{} · {}{} · {}{} · {} ",
                     if *control == 0 { ">" } else { "" },
                     if options.all {
                         "CWD / [All]"
@@ -993,19 +1008,27 @@ fn draw_modal(
                     } else {
                         "[Updated] / Created"
                     },
-                    labels.len().saturating_sub(2)
+                    if loading {
+                        "Loading sessions…".into()
+                    } else {
+                        format!("{} sessions", labels.len().saturating_sub(2))
+                    }
                 ),
-                !*search,
+                !search,
             );
-            list(
-                frame,
-                inner,
-                &labels,
-                (*selection, true),
-                &mut 0,
-                !*search,
-                false,
-            );
+            if loading {
+                text(frame, inner, "Loading sessions…", 0, true);
+            } else {
+                list(
+                    frame,
+                    inner,
+                    &labels,
+                    (*selection, true),
+                    &mut 0,
+                    !search,
+                    false,
+                );
+            }
         }
         Modal::Preview {
             destination,

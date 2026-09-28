@@ -2798,11 +2798,31 @@ fn session_picker_sort_and_archived_reload_preserve_filters() {
         input: ratatui_textarea::TextArea::new(vec!["find".into()]),
         control: 1,
     });
+    let mut terminal = Terminal::new(TestBackend::new(120, 30)).unwrap();
+    draw(&mut app, &mut terminal);
+    let loading_screen: String = terminal
+        .backend()
+        .buffer()
+        .content
+        .iter()
+        .map(|c| c.symbol())
+        .collect();
+    for label in [
+        "Search Codex sessions",
+        "find",
+        "Destination",
+        "CWD / [All]",
+        "Active / [Archived]",
+        "Updated / [Created]",
+        "Loading sessions…",
+    ] {
+        assert!(loading_screen.contains(label), "missing {label}");
+    }
+    assert!(!loading_screen.contains("New session in this directory"));
     assert!(app.poll());
     assert!(
         matches!(&app.modal, Some(Modal::Sessions { options: loaded, input, control: 1, selection: 0, .. }) if *loaded == options && input.lines() == ["find"])
     );
-    let mut terminal = Terminal::new(TestBackend::new(120, 30)).unwrap();
     draw(&mut app, &mut terminal);
     let screen: String = terminal
         .backend()

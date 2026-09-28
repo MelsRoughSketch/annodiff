@@ -269,7 +269,7 @@ print("fake-editor-finished", flush=True)
                 assert b"cannot lock" in other.stderr, other.stderr
                 assert state.read_bytes() == before
             send(save_key)  # Destination selection, not delivery.
-            wait_for(lambda: b"Destination" in output)
+            wait_for(lambda: b"2 sessions" in output)
             assert not payload.exists()
             requests = [json.loads(line) for line in Path(env["FAKE_RPC_LOG"]).read_text().splitlines()]
             listings = [r["params"] for r in requests if r["method"] == "thread/list"]
@@ -282,7 +282,7 @@ print("fake-editor-finished", flush=True)
                 wait_for(lambda: b"elsewhere" in output[start:], "All loads other directories")
                 start = len(output)
                 send("a")
-                wait_for(lambda: b"Destination" in output[start:], "CWD reload")
+                wait_for(lambda: b"2 sessions" in output[start:], "CWD reload")
             send("\r")  # Preview.
             wait_for(lambda: b"Comments to send" in output)
             assert not payload.exists()
@@ -319,7 +319,7 @@ print("fake-editor-finished", flush=True)
             payload.unlink()
             start = len(output)
             send(save_key)
-            wait_for(lambda: b"Destination" in output[start:], "history send destination")
+            wait_for(lambda: b"2 sessions" in output[start:], "history send destination")
             send("\r")
             wait_for(lambda: b"[history]" in output[start:], "history send preview")
             send("\r")
@@ -342,7 +342,7 @@ print("fake-editor-finished", flush=True)
                            for f in saved["Files"] for c in f["Comments"]))
                 start = len(output)
                 send(save_key)
-                wait_for(lambda: b"Destination" in output[start:])
+                wait_for(lambda: b"2 sessions" in output[start:])
                 send("\t\x1b[C")  # Active -> Archived.
                 wait_for(lambda: b"ARCHIVED_FIXTURE" in output[start:])
                 send("\t\x1b[C")  # Updated -> Created; keep archived selection.
