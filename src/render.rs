@@ -164,17 +164,18 @@ fn list<'a, T: Clone + Into<Line<'a>>>(
 pub fn draw(app: &mut App, frame: &mut Frame) {
     app.highlight_pending = false;
     let area = frame.area();
+    app.pane_area = Rect::new(area.x, area.y, area.width, area.height.saturating_sub(2));
     if area.width == 0 || area.height == 0 {
         return;
     }
-    let main = Rect::new(area.x, area.y, area.width, area.height.saturating_sub(2));
+    let main = app.pane_area;
     app.pane_rects = [Rect::default(); 4];
     app.diff_mode_rects = [Rect::default(); 2];
     let full = app.zoom == 2;
     let sidebar_width = if full {
         if app.pane == 0 { 0 } else { main.width }
     } else {
-        main.width * 3 / 10
+        (i32::from(main.width) * app.sidebar_percent / 100) as u16
     };
     let sidebar = Rect::new(main.x, main.y, sidebar_width, main.height);
     if sidebar.width > 0 {
@@ -1099,6 +1100,7 @@ Global
 h/l or ←→: focus previous/next pane or diff side
 Tab: move focus to the next pane
 +/-: expand/shrink pane (Diff: normal / full; others: normal / tall / full)
+{/}: shrink/widen focused pane side by 5% (normal / tall); drag the sidebar/Diff border to resize
 Ctrl+Enter/F2: preview and send unsent Open comments
 r: reload diff and file/commit lists   R: choose Archive or Reset all comments   q: quit the app
 

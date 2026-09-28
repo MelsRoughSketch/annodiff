@@ -109,11 +109,13 @@ pub struct App {
     pub zoom: u8,
     pub wrap: bool,
     pub bias: i32,
+    pub sidebar_percent: i32,
     pub cursor: [usize; 4],
     pub offset: usize,
     pub anchor: Option<(usize, usize)>,
     drag_start: Option<(usize, usize)>,
     divider_drag: Option<(u16, i32)>,
+    pane_drag: Option<(u16, i32)>,
     pub queries: [String; 4],
     pub labels: [Vec<Line<'static>>; 4],
     pub file_rows: Vec<usize>,
@@ -129,6 +131,7 @@ pub struct App {
     pub modal: Option<Modal>,
     pub inspection: Option<Inspection>,
     pub pane_rects: [Rect; 4],
+    pub(crate) pane_area: Rect,
     pub diff_inner: Rect,
     pub diff_mode_rects: [Rect; 2],
     pub editor_rect: Rect,
@@ -207,11 +210,13 @@ impl App {
             zoom: 0,
             wrap: false,
             bias: 0,
+            sidebar_percent: 30,
             cursor: [0; 4],
             offset: 0,
             anchor: None,
             drag_start: None,
             divider_drag: None,
+            pane_drag: None,
             queries: Default::default(),
             labels: Default::default(),
             file_rows: Vec::new(),
@@ -227,6 +232,7 @@ impl App {
             modal: None,
             inspection: None,
             pane_rects: [Rect::default(); 4],
+            pane_area: Rect::default(),
             diff_inner: Rect::default(),
             diff_mode_rects: [Rect::default(); 2],
             editor_rect: Rect::default(),
@@ -277,6 +283,14 @@ impl App {
             "Diff width · old {}% / new {}%",
             50 + self.bias,
             50 - self.bias
+        );
+    }
+    fn set_sidebar_percent(&mut self, percent: i32) {
+        self.sidebar_percent = percent.clamp(10, 90);
+        self.status = format!(
+            "Pane width · sidebar {}% / diff {}%",
+            self.sidebar_percent,
+            100 - self.sidebar_percent
         );
     }
     pub fn split_for(&self, file: usize) -> bool {
@@ -1173,6 +1187,9 @@ impl App {
         Ok(())
     }
     pub fn handle(&mut self, event: Event) -> Result<Effect> {
+        if matches!(event, Event::Resize(..)) {
+            self.pane_drag = None;
+        }
         if let Event::Paste(text) = &event {
             if let Some(editor) = &mut self.editor {
                 editor.input.insert_str(text);
@@ -1207,6 +1224,18 @@ impl App {
                 mouse.kind,
                 MouseEventKind::Drag(MouseButton::Left) | MouseEventKind::Up(MouseButton::Left)
             ) {
+                if let Some((start_x, percent)) = self.pane_drag {
+                    if self.zoom < 2 && !self.pane_area.is_empty() {
+                        let delta = i32::from(mouse.column) - i32::from(start_x);
+                        self.set_sidebar_percent(
+                            percent + delta * 100 / i32::from(self.pane_area.width),
+                        );
+                    }
+                    if mouse.kind == MouseEventKind::Up(MouseButton::Left) {
+                        self.pane_drag = None;
+                    }
+                    return Ok(Effect::None);
+                }
                 if self.diff_inner.is_empty() {
                     self.drag_start = None;
                     self.divider_drag = None;
@@ -1243,6 +1272,19 @@ impl App {
             if mouse.kind == MouseEventKind::Down(MouseButton::Left) {
                 self.drag_start = None;
                 self.divider_drag = None;
+                self.pane_drag = None;
+                let sidebar_width =
+                    (i32::from(self.pane_area.width) * self.sidebar_percent / 100) as u16;
+                let boundary = self.pane_area.x + sidebar_width;
+                if self.zoom < 2
+                    && sidebar_width > 0
+                    && sidebar_width < self.pane_area.width
+                    && self.pane_area.contains((mouse.column, mouse.row).into())
+                    && (mouse.column == boundary || mouse.column == boundary - 1)
+                {
+                    self.pane_drag = Some((mouse.column, self.sidebar_percent));
+                    return Ok(Effect::None);
+                }
                 if self.split()
                     && self.diff_inner.contains((mouse.column, mouse.row).into())
                     && self.view().is_some_and(|v| {
@@ -1341,6 +1383,7 @@ impl App {
         }
         self.drag_start = None;
         self.divider_drag = None;
+        self.pane_drag = None;
         if self.editor.is_some() {
             match key.code {
                 K::Esc => self.close_editor(),
@@ -1405,6 +1448,12 @@ impl App {
             K::Char('-') if self.pane == 0 => self.zoom = 0,
             K::Char('+') => self.zoom = (self.zoom + 1).min(2),
             K::Char('-') => self.zoom = self.zoom.saturating_sub(1),
+            K::Char('{' | '}') if self.zoom < 2 => {
+                let step = if code == K::Char('}') { 5 } else { -5 };
+                self.set_sidebar_percent(
+                    self.sidebar_percent + if self.pane == 0 { -step } else { step },
+                );
+            }
             K::Char('r') => self.refresh(false)?,
             K::Char('R') => {
                 self.modal = Some(Modal::Confirm {
