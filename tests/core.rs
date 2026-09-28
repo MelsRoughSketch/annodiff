@@ -3360,3 +3360,130 @@ fn file_tree_refresh_preserves_paths_and_folds_when_indices_change() {
     assert!(app.file.is_none());
     assert!(app.tree_rows.is_empty());
 }
+
+#[test]
+fn deleting_all_input_leaves_only_the_terminal_cursor() {
+    use ratatui::{backend::Backend, style::Modifier};
+    for search in [false, true] {
+        let dir = tempfile::tempdir().unwrap();
+        let mut app = App::new(
+            Review {
+                files: vec![fixture()],
+                ..Default::default()
+            },
+            dir.path().join("state.json"),
+        );
+        let mut terminal = Terminal::new(TestBackend::new(100, 30)).unwrap();
+        draw(&mut app, &mut terminal);
+        if search {
+            press(&mut app, K::Char('/'));
+        } else {
+            app.start_edit(None, true).unwrap();
+        }
+        app.handle(Event::Paste("abc日本語".into())).unwrap();
+        draw(&mut app, &mut terminal);
+        for _ in 0..6 {
+            press(&mut app, K::Backspace);
+            draw(&mut app, &mut terminal);
+        }
+        assert!(terminal.backend().cursor_visible());
+        let cursor = terminal.backend_mut().get_cursor_position().unwrap();
+        let cell = &terminal.backend().buffer()[cursor];
+        assert_eq!(cell.symbol(), " ");
+        assert!(!cell.modifier.contains(Modifier::REVERSED));
+    }
+}
+
+#[test]
+fn input_cursor_tracks_japanese_text_and_is_hidden_outside_editing() {
+    use ratatui::backend::Backend;
+    use ratatui::layout::Rect;
+    let dir = tempfile::tempdir().unwrap();
+    let mut app = App::new(
+        Review {
+            files: vec![fixture()],
+            ..Default::default()
+        },
+        dir.path().join("state.json"),
+    );
+    let mut terminal = Terminal::new(TestBackend::new(100, 30)).unwrap();
+    draw(&mut app, &mut terminal);
+    assert!(!terminal.backend().cursor_visible());
+    app.start_edit(None, true).unwrap();
+    app.handle(Event::Paste("a日本語".into())).unwrap();
+    draw(&mut app, &mut terminal);
+    assert!(terminal.backend().cursor_visible());
+    terminal
+        .backend_mut()
+        .assert_cursor_position((app.editor_rect.x + 8, app.editor_rect.y + 1));
+    // Move onto a wide character, then across it; use display cells, not character counts.
+    press(&mut app, K::Left);
+    draw(&mut app, &mut terminal);
+    terminal
+        .backend_mut()
+        .assert_cursor_position((app.editor_rect.x + 6, app.editor_rect.y + 1));
+    press(&mut app, K::Right);
+    app.handle(Event::Paste("\t続き".repeat(30) + &"\n日本語".repeat(15)))
+        .unwrap();
+    for width in [100, 40, 12, 100] {
+        terminal.backend_mut().resize(width, 30);
+        draw(&mut app, &mut terminal);
+        assert!(terminal.backend().cursor_visible());
+        let cursor = terminal.backend_mut().get_cursor_position().unwrap();
+        let rect = app.editor_rect.inner(ratatui::layout::Margin::new(1, 1));
+        assert!(rect.contains(cursor));
+        assert!(cursor.x <= rect.x + 6); // Horizontal scrolling may persist after a resize.
+        assert_eq!(cursor.y, rect.bottom() - 1);
+    }
+    press(&mut app, K::Esc);
+    draw(&mut app, &mut terminal);
+    assert!(!terminal.backend().cursor_visible());
+    press(&mut app, K::Char('/'));
+    app.handle(Event::Paste("日本語".into())).unwrap();
+    draw(&mut app, &mut terminal);
+    assert!(terminal.backend().cursor_visible());
+    terminal.backend_mut().assert_cursor_position((7, 26));
+    app.handle(Event::Paste("検索".repeat(80))).unwrap();
+    draw(&mut app, &mut terminal);
+    let cursor = terminal.backend_mut().get_cursor_position().unwrap();
+    assert!(Rect::new(1, 26, 98, 1).contains(cursor));
+    assert!(terminal.backend().cursor_visible());
+    assert_eq!(cursor.x, 97);
+    if let Some(Modal::Search { input, .. }) = &app.modal {
+        assert_eq!(input.lines(), &["日本語".to_owned() + &"検索".repeat(80)]);
+        assert_eq!(input.cursor(), (0, 163));
+    } else {
+        panic!("search modal closed while rendering");
+    }
+    press(&mut app, K::Esc);
+    press(&mut app, K::Char('?'));
+    press(&mut app, K::Char('/'));
+    app.handle(Event::Paste("日本語".into())).unwrap();
+    draw(&mut app, &mut terminal);
+    assert!(terminal.backend().cursor_visible());
+    press(&mut app, K::Enter);
+    draw(&mut app, &mut terminal);
+    assert!(!terminal.backend().cursor_visible());
+    app.modal = Some(Modal::Sessions {
+        items: Vec::new(),
+        input: Default::default(),
+        selection: 0,
+        search: false,
+        options: Default::default(),
+        control: 0,
+        offset: 0,
+        manual_scroll: false,
+        area: Default::default(),
+        filter_areas: Default::default(),
+    });
+    draw(&mut app, &mut terminal);
+    assert!(!terminal.backend().cursor_visible());
+    press(&mut app, K::Char('/'));
+    app.handle(Event::Paste("日本語".into())).unwrap();
+    draw(&mut app, &mut terminal);
+    assert!(terminal.backend().cursor_visible());
+    terminal.backend_mut().assert_cursor_position((7, 1));
+    press(&mut app, K::Tab);
+    draw(&mut app, &mut terminal);
+    assert!(!terminal.backend().cursor_visible());
+}
