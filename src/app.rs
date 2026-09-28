@@ -465,7 +465,19 @@ impl App {
                 view.starts[row] + part.min(view.starts[row + 1] - view.starts[row] - 1);
         }
         if let Some(view) = self.view() {
-            self.cursor[0] = self.cursor[0].min(view.len().saturating_sub(1));
+            let cursor = self.cursor[0].min(view.len().saturating_sub(1));
+            // Gap labels are not source lines; initial focus must still support line comments.
+            self.cursor[0] = if view
+                .locate(cursor)
+                .is_some_and(|(row, _)| matches!(view.rows[row], Row::Gap(_)))
+            {
+                (cursor..view.len())
+                    .chain((0..cursor).rev())
+                    .find(|&row| view.selectable(row, self.side))
+                    .unwrap_or(cursor)
+            } else {
+                cursor
+            };
         }
         // Selection and an in-progress drag must follow the same source rows as the cursor.
         [self.anchor, self.drag_start] = range_anchors.map(|anchor| {

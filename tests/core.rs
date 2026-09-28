@@ -254,6 +254,17 @@ fn initial_context_gaps_match_the_compared_file_boundaries() {
             assert_eq!(rows.starts_with(&gaps), leading, "line {line}");
             assert_eq!(rows.ends_with(&gaps), trailing, "line {line}");
             assert!(app.view().unwrap().expanded.is_none());
+            let mut initial_terminal = Terminal::new(TestBackend::new(120, 24)).unwrap();
+            draw(&mut app, &mut initial_terminal);
+            assert!(
+                app.view()
+                    .unwrap()
+                    .source(app.cursor[0], app.side)
+                    .is_some()
+            );
+            app.focus(0);
+            app.start_edit(None, false).unwrap();
+            app.close_editor();
             if line == 15 {
                 app.focus(0);
                 app.side = usize::from(split);
