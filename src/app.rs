@@ -1701,15 +1701,14 @@ impl App {
                                 } else {
                                     0
                                 };
+                                let target = self.offset
+                                    + mouse.row.saturating_sub(self.diff_inner.y) as usize;
+                                if !self.view().is_some_and(|v| v.selectable(target, side)) {
+                                    return Ok(Effect::None);
+                                }
                                 self.anchor = None;
                                 self.side = side;
-                                self.move_selection(
-                                    1,
-                                    Some(
-                                        self.offset
-                                            + mouse.row.saturating_sub(self.diff_inner.y) as usize,
-                                    ),
-                                );
+                                self.move_selection(1, Some(target));
                                 if self
                                     .view()
                                     .and_then(|v| v.source(self.cursor[0], side))

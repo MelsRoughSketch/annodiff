@@ -2045,6 +2045,79 @@ fn downward_navigation_switches_sides_only_when_the_focused_side_ends() {
 }
 
 #[test]
+fn empty_diff_clicks_do_not_start_comment_drags() {
+    use crossterm::event::{MouseButton, MouseEvent, MouseEventKind};
+    let dir = tempfile::tempdir().unwrap();
+    for side in [0, 1] {
+        let patch = if side == 0 {
+            "@@ -1,3 +1,4 @@\n first\n+added\n \n last\n"
+        } else {
+            "@@ -1,4 +1,3 @@\n first\n-removed\n \n last\n"
+        };
+        let mut app = App::new(
+            Review {
+                files: vec![file(patch)],
+                split: true,
+                ..Default::default()
+            },
+            dir.path().join("state.json"),
+        );
+        app.focus(0);
+        app.side = side;
+        let mut terminal = Terminal::new(TestBackend::new(120, 30)).unwrap();
+        draw(&mut app, &mut terminal);
+        let padding = (0..app.view().unwrap().len())
+            .find(|&row| {
+                let view = app.view().unwrap();
+                !view.selectable(row, side) && view.selectable(row, 1 - side)
+            })
+            .unwrap();
+        let click = |app: &mut App, row: usize| {
+            let x = if side == 0 {
+                app.diff_inner.x + 1
+            } else {
+                app.diff_inner.right() - 2
+            };
+            let y = app.diff_inner.y + row as u16;
+            for kind in [
+                MouseEventKind::Down(MouseButton::Left),
+                MouseEventKind::Up(MouseButton::Left),
+            ] {
+                app.handle(Event::Mouse(MouseEvent {
+                    kind,
+                    column: x,
+                    row: y,
+                    modifiers: M::NONE,
+                }))
+                .unwrap();
+            }
+        };
+        let cursor = app.cursor[0];
+        let below = app.view().unwrap().len() + 1;
+        for row in [padding, below] {
+            click(&mut app, row);
+            assert!(app.editor.is_none());
+            assert!(app.anchor.is_none());
+            assert_eq!(app.cursor[0], cursor);
+        }
+        // A real blank source line is selectable, but a plain click is not a drag.
+        let blank = (0..app.view().unwrap().len())
+            .find(|&row| {
+                app.view()
+                    .unwrap()
+                    .source(row, side)
+                    .is_some_and(|source| app.review.files[0].lines[source].text == " ")
+            })
+            .unwrap();
+        click(&mut app, blank);
+        assert_eq!(app.cursor[0], blank);
+        assert!(app.editor.is_none());
+        press(&mut app, K::Enter);
+        assert!(app.editor.is_some());
+    }
+}
+
+#[test]
 fn diff_drag_opens_comment_on_release_with_selected_range_and_side() {
     use crossterm::event::{MouseButton, MouseEvent, MouseEventKind};
     let dir = tempfile::tempdir().unwrap();
