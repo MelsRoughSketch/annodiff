@@ -730,12 +730,12 @@ fn pane_zoom_steps_and_layout() {
     for pane in 0..4 {
         app.focus(pane);
         for zoom in 0..=2 {
-            for key in ['+', '-'] {
+            for key in ['+', '_'] {
                 app.zoom = zoom;
                 press(&mut app, K::Char(key));
                 let expected = match (pane, key) {
                     (0, '+') => 2,
-                    (0, '-') => 0,
+                    (0, '_') => 0,
                     (_, '+') => (zoom + 1).min(2),
                     _ => zoom.saturating_sub(1),
                 };
@@ -1563,10 +1563,18 @@ fn sidebar_selection_uses_moving_marker_without_overriding_text_colors() {
     assert_eq!(b[(x, y)].fg, ratatui::style::Color::Rgb(80, 220, 220));
     // Marker + space + two status columns + space: file name retains yellow.
     assert_eq!(b[(x + 5, y)].fg, ratatui::style::Color::Rgb(255, 255, 0));
-    assert_eq!(b[(x + 5, y)].bg, ratatui::style::Color::Reset);
+    assert_eq!(b[(x + 5, y)].bg, ratatui::style::Color::Rgb(84, 84, 84));
+    assert_eq!(
+        b[(rect.right() - 2, y)].bg,
+        ratatui::style::Color::Rgb(84, 84, 84)
+    );
     press(&mut app, K::Down);
     draw(&mut app, &mut terminal);
     assert_eq!(terminal.backend().buffer()[(x, y)].symbol(), " ");
+    assert_eq!(
+        terminal.backend().buffer()[(x + 5, y)].bg,
+        ratatui::style::Color::Reset
+    );
     assert_eq!(terminal.backend().buffer()[(x, y + 1)].symbol(), "▶");
     for pane in [2, 3] {
         app.focus(pane);
@@ -1575,7 +1583,11 @@ fn sidebar_selection_uses_moving_marker_without_overriding_text_colors() {
         let marker = &terminal.backend().buffer()[(rect.x + 1, rect.y + 1)];
         assert_eq!(marker.symbol(), "▶");
         assert_eq!(marker.fg, ratatui::style::Color::Rgb(80, 220, 220));
-        assert_eq!(marker.bg, ratatui::style::Color::Reset);
+        assert_eq!(marker.bg, ratatui::style::Color::Rgb(84, 84, 84));
+        assert_eq!(
+            terminal.backend().buffer()[(x + 5, y + 1)].bg,
+            ratatui::style::Color::Reset
+        );
         assert_eq!(
             terminal.backend().buffer()[(x, y + 1)].fg,
             ratatui::style::Color::DarkGray
@@ -1847,7 +1859,7 @@ fn stacked_layout_focus_zoom_resize_and_state() {
             ratatui::layout::Rect::new(0, 0, 60, 100)
         );
         assert_eq!(app.pane_rects.iter().filter(|r| !r.is_empty()).count(), 1);
-        press(&mut app, K::Char('-'));
+        press(&mut app, K::Char('_'));
         assert_eq!(app.zoom, 0);
     }
     let mouse = |kind, x, y| {
@@ -3140,4 +3152,211 @@ fn send_preview_preserves_scroll_offset_and_cursor_margin() {
     );
     draw(&mut app, &mut terminal);
     assert_eq!(selected_row(&terminal) + 1, before);
+}
+
+#[test]
+fn file_tree_navigation_filters_mouse_and_layout() {
+    use annodiff::app::FileRow::{Directory, File as Leaf};
+    use crossterm::event::{MouseButton, MouseEvent, MouseEventKind};
+    let dir = tempfile::tempdir().unwrap();
+    let mut files: Vec<_> = [
+        "README.md",
+        "src/lib.rs",
+        "src/nested/mod.rs",
+        "src2/other.rs",
+        "日本語/例.rs",
+    ]
+    .into_iter()
+    .map(|path| File {
+        path: path.into(),
+        ..fixture()
+    })
+    .collect();
+    files[2].comments.push(Comment {
+        file: true,
+        text: "review note".into(),
+        ..Default::default()
+    });
+    let mut app = App::new(
+        Review {
+            files,
+            statuses: [("src/nested/mod.rs".into(), " M".into())].into(),
+            ..Default::default()
+        },
+        dir.path().join("state.json"),
+    );
+    let expanded = vec![
+        Leaf(0),
+        Directory("src".into()),
+        Leaf(1),
+        Directory("src/nested".into()),
+        Leaf(2),
+        Directory("src2".into()),
+        Leaf(3),
+        Directory("日本語".into()),
+        Leaf(4),
+    ];
+    assert_eq!(app.tree_rows, expanded);
+    assert!(app.labels[1][4].to_string().contains("M mod.rs · 1 open"));
+    let mut terminal = Terminal::new(TestBackend::new(120, 36)).unwrap();
+    draw(&mut app, &mut terminal);
+    app.move_selection(0, Some(4));
+    assert_eq!(app.current().unwrap().path, "src/nested/mod.rs");
+    assert_eq!(app.refs.len(), 1);
+    press(&mut app, K::Up); // Directory navigation keeps the displayed diff.
+    assert_eq!(app.file, Some(2));
+    press(&mut app, K::Char('+'));
+    let zoom = app.zoom;
+    press(&mut app, K::Char('-'));
+    assert_eq!(app.zoom, zoom);
+    press(&mut app, K::Char('-')); // Repeating collapse does not expand.
+    assert_eq!(app.pane, 1);
+    assert!(!app.tree_rows.contains(&Leaf(2)));
+    press(&mut app, K::Char('='));
+    press(&mut app, K::Char('=')); // Repeating expand does not collapse.
+    assert!(app.tree_rows.contains(&Leaf(2)));
+    assert_eq!(app.zoom, zoom);
+    press(&mut app, K::Char('_'));
+    assert_eq!(app.zoom, 0);
+    press(&mut app, K::Enter);
+    assert_eq!(app.file, Some(2));
+    assert!(matches!(press(&mut app, K::Char('e')), Effect::None));
+    press(&mut app, K::Char('c'));
+    assert!(app.editor.is_none());
+    app.move_selection(0, Some(1));
+    press(&mut app, K::Char(' '));
+    assert_eq!(
+        app.tree_rows,
+        [
+            Leaf(0),
+            Directory("src".into()),
+            Directory("src2".into()),
+            Leaf(3),
+            Directory("日本語".into()),
+            Leaf(4)
+        ]
+    );
+    app.rebuild_lists();
+    assert_eq!(app.cursor[1], 1);
+    // Search reveals the complete ancestor chain without losing either fold.
+    app.filter(1, "SRC/NESTED".into());
+    assert_eq!(app.tree_rows[app.cursor[1]], Leaf(2));
+    assert_eq!(
+        app.tree_rows,
+        [
+            Directory("src".into()),
+            Directory("src/nested".into()),
+            Leaf(2)
+        ]
+    );
+    press(&mut app, K::Char('n'));
+    assert_eq!(app.cursor[1], 2);
+    assert_eq!(app.file, Some(2));
+    app.filter(1, "absent".into());
+    assert!(app.tree_rows.is_empty());
+    assert!(app.file.is_none());
+    draw(&mut app, &mut terminal);
+    app.filter(1, String::new());
+    assert!(!app.tree_rows.contains(&Leaf(1)));
+    press(&mut app, K::Char('o'));
+    assert_eq!(
+        app.tree_rows,
+        [
+            Directory("src".into()),
+            Directory("src/nested".into()),
+            Leaf(2)
+        ]
+    );
+    press(&mut app, K::Char('o'));
+    assert!(!app.tree_rows.contains(&Leaf(2)));
+    // Directory clicks only select; explicit keys expand, and leaf clicks show diffs.
+    let click = |app: &mut App, row: usize| {
+        let rect = app.pane_rects[1];
+        app.handle(Event::Mouse(MouseEvent {
+            kind: MouseEventKind::Down(MouseButton::Left),
+            column: rect.x + 2,
+            row: rect.y + 1 + (row - app.list_offsets[1]) as u16,
+            modifiers: M::NONE,
+        }))
+        .unwrap();
+    };
+    draw(&mut app, &mut terminal);
+    click(&mut app, 1);
+    assert_eq!(app.tree_rows[app.cursor[1]], Directory("src".into()));
+    assert!(!app.tree_rows.contains(&Leaf(1)));
+    press(&mut app, K::Char('='));
+    assert!(app.tree_rows.contains(&Leaf(1)));
+    assert!(!app.tree_rows.contains(&Leaf(2)));
+    draw(&mut app, &mut terminal);
+    click(&mut app, 3);
+    assert!(!app.tree_rows.contains(&Leaf(2)));
+    press(&mut app, K::Char('='));
+    assert_eq!(app.tree_rows, expanded);
+    click(&mut app, 3);
+    assert_eq!(app.tree_rows, expanded);
+    draw(&mut app, &mut terminal);
+    click(&mut app, 4);
+    assert_eq!(app.file, Some(2));
+    press(&mut app, K::Enter);
+    assert_eq!(app.pane, 0);
+    app.focus(1);
+    app.move_selection(0, Some(1));
+    press(&mut app, K::Char(' '));
+    let folded = app.tree_rows.clone();
+    // Layout changes and narrow renders preserve the selected file and tree.
+    for (width, height) in [(40, 12), (20, 8), (80, 40)] {
+        terminal.backend_mut().resize(width, height);
+        press(&mut app, K::Char('t'));
+        draw(&mut app, &mut terminal);
+        assert_eq!(app.tree_rows, folded);
+        assert_eq!(app.file, Some(2));
+    }
+}
+
+#[test]
+fn file_tree_refresh_preserves_paths_and_folds_when_indices_change() {
+    use annodiff::app::FileRow::{Directory, File as Leaf};
+    let dir = tempfile::tempdir().unwrap();
+    let mut app = App::new(
+        Review {
+            files: ["src/a.rs", "src/b.rs", "tests/test.rs"]
+                .into_iter()
+                .map(|path| File {
+                    path: path.into(),
+                    ..fixture()
+                })
+                .collect(),
+            ..Default::default()
+        },
+        dir.path().join("state.json"),
+    );
+    app.move_selection(0, Some(2));
+    assert_eq!(app.current().unwrap().path, "src/b.rs");
+    app.move_selection(0, Some(0));
+    press(&mut app, K::Enter);
+    let mut next = app.review.clone();
+    next.files.insert(
+        0,
+        File {
+            path: "new.txt".into(),
+            ..fixture()
+        },
+    );
+    app.apply(next).unwrap();
+    assert_eq!(app.current().unwrap().path, "src/b.rs");
+    assert_eq!(app.tree_rows[app.cursor[1]], Directory("src".into()));
+    assert!(!app.tree_rows.contains(&Leaf(2)));
+    press(&mut app, K::Enter);
+    app.move_selection(0, Some(3));
+    assert_eq!(app.file, Some(2));
+    let mut next = app.review.clone();
+    next.files.remove(0);
+    app.apply(next).unwrap();
+    assert_eq!(app.current().unwrap().path, "src/b.rs");
+    assert_eq!(app.tree_rows[app.cursor[1]], Leaf(1));
+    let mut next = app.review.clone();
+    next.files.clear();
+    app.apply(next).unwrap();
+    assert!(app.file.is_none());
+    assert!(app.tree_rows.is_empty());
 }

@@ -15,7 +15,7 @@ use ratatui::{
 };
 use ratatui_textarea::TextArea;
 use std::{
-    collections::{HashMap, VecDeque},
+    collections::{HashMap, HashSet, VecDeque},
     fs,
     path::{Path, PathBuf},
     sync::{
@@ -108,6 +108,12 @@ pub enum Effect {
     Clipboard(String),
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum FileRow {
+    Directory(String),
+    File(usize),
+}
+
 pub struct App {
     pub review: Review,
     pub session_cwd: String,
@@ -131,6 +137,8 @@ pub struct App {
     pub queries: [String; 4],
     pub labels: [Vec<Line<'static>>; 4],
     pub file_rows: Vec<usize>,
+    pub tree_rows: Vec<FileRow>,
+    collapsed_dirs: HashSet<String>,
     pub refs: Vec<CommentRef>,
     pub commits: Vec<Commit>,
     pub graphs: Vec<String>,
@@ -235,6 +243,8 @@ impl App {
             queries: Default::default(),
             labels: Default::default(),
             file_rows: Vec::new(),
+            tree_rows: Vec::new(),
+            collapsed_dirs: HashSet::new(),
             refs: Vec::new(),
             commits: Vec::new(),
             graphs: Vec::new(),
@@ -465,7 +475,11 @@ impl App {
         }
         self.file = file;
         self.manual_scroll[0] = false;
-        if let Some(pos) = self.file_rows.iter().position(|i| Some(*i) == file) {
+        if let Some(pos) = self
+            .tree_rows
+            .iter()
+            .position(|row| matches!(row, FileRow::File(i) if Some(*i) == file))
+        {
             self.cursor[1] = pos;
         }
         self.cursor[0] = 0;
@@ -476,6 +490,14 @@ impl App {
         self.rebuild_comments();
     }
     pub fn rebuild_lists(&mut self) {
+        let directory = match self.tree_rows.get(self.cursor[1]) {
+            Some(FileRow::Directory(path))
+                if self.queries[1].is_empty() && !self.commented_files_only =>
+            {
+                Some(path.clone())
+            }
+            _ => None,
+        };
         self.total_changes = self
             .review
             .files
@@ -484,6 +506,7 @@ impl App {
             .filter(|l| (l.old > 0) != (l.new > 0))
             .count();
         self.file_rows.clear();
+        self.tree_rows.clear();
         self.labels[1].clear();
         let mut counts = HashMap::<&str, usize>::new();
         for f in self.review.files.iter().chain(&self.review.history) {
@@ -509,6 +532,45 @@ impl App {
                 continue;
             }
             self.file_rows.push(i);
+        }
+        let filtered = !self.queries[1].is_empty() || self.commented_files_only;
+        let mut files = self.file_rows.clone();
+        files.sort_by(|a, b| {
+            self.review.files[*a]
+                .path
+                .split('/')
+                .cmp(self.review.files[*b].path.split('/'))
+        });
+        let mut directories = HashSet::new();
+        for i in files {
+            let f = &self.review.files[i];
+            let mut hidden = false;
+            let mut depth = 0;
+            for (end, _) in f.path.match_indices('/') {
+                let path = &f.path[..end];
+                if directories.insert(path.to_owned()) {
+                    self.tree_rows.push(FileRow::Directory(path.to_owned()));
+                    self.labels[1].push(Line::from(format!(
+                        "{}{} {}/",
+                        "  ".repeat(depth),
+                        if !filtered && self.collapsed_dirs.contains(path) {
+                            "▶"
+                        } else {
+                            "▼"
+                        },
+                        path.rsplit('/').next().unwrap_or(path)
+                    )));
+                }
+                depth += 1;
+                if !filtered && self.collapsed_dirs.contains(path) {
+                    hidden = true;
+                    break;
+                }
+            }
+            if hidden {
+                continue;
+            }
+            self.tree_rows.push(FileRow::File(i));
             let added = f.lines.iter().filter(|l| l.new > 0 && l.old == 0).count();
             let removed = f.lines.iter().filter(|l| l.old > 0 && l.new == 0).count();
             let open = counts.get(f.path.as_str()).copied().unwrap_or(0);
@@ -516,23 +578,21 @@ impl App {
                 "{:>2} ",
                 self.review.statuses.get(&f.path).map_or("", String::as_str)
             );
-            let mut spans: Vec<_> = status
-                .chars()
-                .map(|ch| {
-                    let color = match ch {
-                        'A' => Color::LightGreen,
-                        'M' | 'T' => Color::Rgb(255, 255, 0),
-                        '?' | 'D' => Color::Rgb(255, 0, 0),
-                        'R' | 'C' => Color::Rgb(0, 255, 255),
-                        'U' => Color::Rgb(255, 0, 255),
-                        _ => Color::Reset,
-                    };
-                    Span::styled(ch.to_string(), Style::default().fg(color))
-                })
-                .collect();
+            let mut spans = vec![Span::raw("  ".repeat(depth))];
+            spans.extend(status.chars().map(|ch| {
+                let color = match ch {
+                    'A' => Color::LightGreen,
+                    'M' | 'T' => Color::Rgb(255, 255, 0),
+                    '?' | 'D' => Color::Rgb(255, 0, 0),
+                    'R' | 'C' => Color::Rgb(0, 255, 255),
+                    'U' => Color::Rgb(255, 0, 255),
+                    _ => Color::Reset,
+                };
+                Span::styled(ch.to_string(), Style::default().fg(color))
+            }));
             spans.extend([
                 Span::styled(
-                    f.path.clone(),
+                    f.path.rsplit('/').next().unwrap_or(&f.path).to_owned(),
                     if open > 0 {
                         Style::default().fg(Color::Rgb(255, 255, 0))
                     } else {
@@ -554,16 +614,41 @@ impl App {
             ]);
             self.labels[1].push(Line::from(spans));
         }
-        if let Some(pos) = self.file_rows.iter().position(|i| Some(*i) == self.file) {
-            self.cursor[1] = pos;
-        } else {
-            self.cursor[1] = 0;
+        if !self.file.is_some_and(|i| self.file_rows.contains(&i)) {
             self.file = self.file_rows.first().copied();
             self.cursor[0] = 0;
             self.offset = 0;
         }
+        self.cursor[1] = directory
+            .and_then(|path| self.tree_rows.iter().position(|row| matches!(row, FileRow::Directory(dir) if *dir == path)))
+            .or_else(|| self.tree_rows.iter().position(|row| matches!(row, FileRow::File(i) if Some(*i) == self.file)))
+            .or_else(|| {
+                let path = &self.review.files.get(self.file?)?.path;
+                self.tree_rows.iter().rposition(|row| matches!(row, FileRow::Directory(dir) if path.strip_prefix(dir).is_some_and(|rest| rest.starts_with('/'))))
+            })
+            .unwrap_or(0);
         self.rebuild_comments();
         self.rebuild_commits();
+    }
+    fn set_directory_expanded(&mut self, expand: Option<bool>) -> bool {
+        let Some(FileRow::Directory(path)) = self.tree_rows.get(self.cursor[1]) else {
+            return false;
+        };
+        if !self.queries[1].is_empty() || self.commented_files_only {
+            if expand != Some(true) {
+                self.status = "Clear Files filters to collapse directories".into();
+            }
+            return true;
+        }
+        let path = path.clone();
+        if expand.unwrap_or_else(|| self.collapsed_dirs.contains(&path)) {
+            self.collapsed_dirs.remove(&path);
+        } else {
+            self.collapsed_dirs.insert(path);
+        }
+        self.manual_scroll[1] = false;
+        self.rebuild_lists();
+        true
     }
     pub fn rebuild_comments(&mut self) {
         self.refs.clear();
@@ -749,8 +834,10 @@ impl App {
             self.cursor[self.pane] = absolute
                 .unwrap_or_else(|| self.cursor[self.pane].saturating_add_signed(delta))
                 .min(max);
-            if self.pane == 1 {
-                self.select_file(self.file_rows.get(self.cursor[1]).copied());
+            if self.pane == 1
+                && let Some(FileRow::File(i)) = self.tree_rows.get(self.cursor[1])
+            {
+                self.select_file(Some(*i));
             }
             if self.pane == 2 {
                 self.preview_comment();
@@ -796,7 +883,13 @@ impl App {
             .filter(|r| matches!(r, Row::Comment { .. }));
         next.save(&self.state)?;
         let changed = !self.review.same_diff(&next);
+        let selected_path = self.current().map(|file| file.path.clone());
         self.review = next;
+        if changed {
+            self.file = selected_path
+                .and_then(|path| self.review.files.iter().position(|file| file.path == path))
+                .or_else(|| (!self.review.files.is_empty()).then_some(0));
+        }
         self.after_save(changed, source, inline);
         Ok(())
     }
@@ -804,7 +897,6 @@ impl App {
         self.anchor = None;
         if changed {
             self.cache.clear();
-            self.file = (!self.review.files.is_empty()).then_some(0);
             self.cursor[0] = 0;
             self.offset = 0;
         } else {
@@ -911,7 +1003,11 @@ impl App {
             return;
         }
         self.file = Some(r.file);
-        if let Some(i) = self.file_rows.iter().position(|f| *f == r.file) {
+        if let Some(i) = self
+            .tree_rows
+            .iter()
+            .position(|row| *row == FileRow::File(r.file))
+        {
             self.cursor[1] = i;
         }
         self.ensure_view();
@@ -1070,6 +1166,17 @@ impl App {
         if self.pane > 0 {
             let count = self.labels[self.pane].len();
             if count > 0 && !include_current {
+                if self.pane == 1 {
+                    for offset in 1..=count {
+                        let row = (self.cursor[1] as isize + step * offset as isize)
+                            .rem_euclid(count as isize) as usize;
+                        if matches!(self.tree_rows[row], FileRow::File(_)) {
+                            self.move_selection(0, Some(row));
+                            break;
+                        }
+                    }
+                    return;
+                }
                 self.move_selection(
                     0,
                     Some(
@@ -1659,9 +1766,9 @@ impl App {
                 .into();
             }
             K::Char('+') if self.stacked || self.pane == 0 => self.zoom = 2,
-            K::Char('-') if self.stacked || self.pane == 0 => self.zoom = 0,
+            K::Char('_') if self.stacked || self.pane == 0 => self.zoom = 0,
             K::Char('+') => self.zoom = (self.zoom + 1).min(2),
-            K::Char('-') => self.zoom = self.zoom.saturating_sub(1),
+            K::Char('_') => self.zoom = self.zoom.saturating_sub(1),
             K::Char('{' | '}') if self.zoom < 2 => {
                 let step = if code == K::Char('}') { 5 } else { -5 };
                 self.set_sidebar_percent(self.sidebar_percent + step);
@@ -1786,10 +1893,23 @@ impl App {
                     Some((self.cursor[0], self.side))
                 };
             }
+            K::Char('c' | 'e')
+                if self.pane == 1
+                    && matches!(
+                        self.tree_rows.get(self.cursor[1]),
+                        Some(FileRow::Directory(_))
+                    ) =>
+            {
+                self.status = "Select a file to comment or open it".into();
+            }
             K::Char('c') if self.pane != 2 => self.start_edit(None, self.pane == 1)?,
             K::Char('e') if self.pane != 2 => return Ok(Effect::Editor),
             K::Enter => match self.pane {
-                1 => self.focus(0),
+                1 => {
+                    if !self.set_directory_expanded(None) {
+                        self.focus(0);
+                    }
+                }
                 3 => self.select_commit()?,
                 2 => {
                     if let Some(r) = self.selected_ref() {
@@ -1802,7 +1922,13 @@ impl App {
                 }
                 _ => self.start_edit(self.selected_ref(), false)?,
             },
+            K::Char('-' | '=') if self.pane == 1 => {
+                self.set_directory_expanded(Some(code == K::Char('=')));
+            }
             K::Char(' ') if self.pane == 3 => self.select_commit()?,
+            K::Char(' ') if self.pane == 1 => {
+                self.set_directory_expanded(None);
+            }
             _ => {}
         }
         Ok(Effect::None)
