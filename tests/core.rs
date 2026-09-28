@@ -1863,6 +1863,16 @@ fn downward_navigation_switches_sides_only_when_the_focused_side_ends() {
             assert_eq!(app.side, short_side);
             assert_eq!(app.cursor[0], rows[1]);
             assert!(app.anchor.is_some());
+            let bounds = app.bounds();
+            for _ in 0..2 {
+                press(&mut app, key);
+                assert_eq!(app.side, short_side);
+                assert_eq!(app.cursor[0], rows[1]);
+                assert_eq!(app.anchor, Some((rows[0], short_side)));
+                assert_eq!(app.bounds(), bounds);
+            }
+            // Automatic switching resumes only after leaving range-selection mode.
+            press(&mut app, K::Char('v'));
             let step = if key == K::PageDown {
                 app.pane_rects[0].height.saturating_sub(3).max(1) as usize
             } else {
