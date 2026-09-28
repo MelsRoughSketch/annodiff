@@ -198,6 +198,129 @@ fn prompt_filters_status_side_and_fences() {
 }
 
 #[test]
+fn initial_context_gaps_match_the_compared_file_boundaries() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    git(root, &["init", "-q"]);
+    // No final newline: the last physical line still counts toward omitted context.
+    let original = (1..=30)
+        .map(|i| format!("line {i}"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    fs::write(root.join("file.txt"), &original).unwrap();
+    git(root, &["add", "."]);
+    git(
+        root,
+        &[
+            "-c",
+            "user.name=Test",
+            "-c",
+            "user.email=t@x",
+            "-c",
+            "commit.gpgsign=false",
+            "commit",
+            "-qm",
+            "base",
+        ],
+    );
+    for (line, leading, trailing) in [
+        (1, false, true),
+        (15, true, true),
+        (27, true, false),
+        (30, true, false),
+    ] {
+        fs::write(
+            root.join("file.txt"),
+            original
+                .lines()
+                .map(|text| {
+                    if text == format!("line {line}") {
+                        format!("changed {line}")
+                    } else {
+                        text.to_owned()
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join("\n"),
+        )
+        .unwrap();
+        let review = review::snapshot(root.to_str().unwrap(), "HEAD", "").unwrap();
+        for split in [false, true] {
+            let mut app = App::new(review.clone(), root.join(".git/state.json"));
+            app.set_split(split).unwrap();
+            app.ensure_view();
+            let rows = &app.view().unwrap().rows;
+            let gaps = [Row::Gap(false), Row::Gap(true), Row::Gap(false)];
+            assert_eq!(rows.starts_with(&gaps), leading, "line {line}");
+            assert_eq!(rows.ends_with(&gaps), trailing, "line {line}");
+            assert!(app.view().unwrap().expanded.is_none());
+            let mut initial_terminal = Terminal::new(TestBackend::new(120, 24)).unwrap();
+            draw(&mut app, &mut initial_terminal);
+            assert!(
+                app.view()
+                    .unwrap()
+                    .source(app.cursor[0], app.side)
+                    .is_some()
+            );
+            app.focus(0);
+            app.start_edit(None, false).unwrap();
+            app.close_editor();
+            if line == 15 {
+                app.focus(0);
+                app.side = usize::from(split);
+                let mut terminal = Terminal::new(TestBackend::new(120, 12)).unwrap();
+                for (start, expected) in [(12, [2, 1]), (18, [28, 30])] {
+                    if app.view().unwrap().expanded.is_some() {
+                        press(&mut app, K::Char('Z'));
+                    }
+                    draw(&mut app, &mut terminal);
+                    let source = app.review.files[0]
+                        .lines
+                        .iter()
+                        .position(|l| l.old == start)
+                        .unwrap();
+                    app.cursor[0] = app
+                        .view()
+                        .unwrap()
+                        .visual_for_source(source, app.side)
+                        .unwrap();
+                    app.offset = app.cursor[0].saturating_sub(3);
+                    let mut previous_line = start;
+                    for number in expected {
+                        let screen_row = app.cursor[0].saturating_sub(app.offset);
+                        press(&mut app, K::Char('z'));
+                        let view = app.view().unwrap();
+                        let display = view.display_source(app.cursor[0], app.side).unwrap();
+                        assert_eq!(view.expanded.as_ref().unwrap().lines[display].old, number);
+                        assert_eq!(app.offset, app.cursor[0].saturating_sub(screen_row));
+                        let previous_display = view
+                            .expanded
+                            .as_ref()
+                            .unwrap()
+                            .lines
+                            .iter()
+                            .position(|line| line.old == previous_line)
+                            .unwrap();
+                        let from = view
+                            .visual_for_display(previous_display, app.side)
+                            .unwrap()
+                            .saturating_sub(screen_row);
+                        assert_eq!(
+                            app.expansion_scroll_from,
+                            (from != app.offset).then_some(from)
+                        );
+                        previous_line = number;
+                        draw(&mut app, &mut terminal);
+                        assert!(app.cursor[0] >= app.offset);
+                        assert!(app.cursor[0] < app.offset + usize::from(app.diff_inner.height));
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[test]
 fn file_expand_preserves_diff_comments_and_supports_full_file_navigation() {
     let dir = tempfile::tempdir().unwrap();
     let root = dir.path();
@@ -279,6 +402,9 @@ fn file_expand_preserves_diff_comments_and_supports_full_file_navigation() {
         app.side = usize::from(split);
         app.wrap = true;
         draw(&mut app, &mut terminal);
+        let gaps = [Row::Gap(false), Row::Gap(true), Row::Gap(false)];
+        assert!(app.view().unwrap().rows.starts_with(&gaps));
+        assert!(app.view().unwrap().rows.ends_with(&gaps));
         app.cursor[0] = app
             .view()
             .unwrap()
@@ -286,6 +412,11 @@ fn file_expand_preserves_diff_comments_and_supports_full_file_navigation() {
             .unwrap();
         let hunks = app.view().unwrap().hunk_rows.clone().map(|rows| rows.len());
         for count in [10, 20] {
+            app.cursor[0] = app
+                .view()
+                .unwrap()
+                .visual_for_source(source, app.side)
+                .unwrap();
             press(&mut app, K::Char('z'));
             draw(&mut app, &mut terminal);
             let view = app.view().unwrap();
@@ -304,7 +435,8 @@ fn file_expand_preserves_diff_comments_and_supports_full_file_navigation() {
                     .iter()
                     .any(|i| view.code[*i].text.starts_with("line 80:"))
             );
-            assert_eq!(view.source(app.cursor[0], app.side), Some(source));
+            assert_eq!(view.source(app.cursor[0], app.side), None);
+            assert!(view.display_source(app.cursor[0], app.side).is_some());
             assert!(view.rows.iter().any(|row| matches!(row, Row::Gap(true))));
             for (row, item) in view.rows.iter().enumerate() {
                 if *item == Row::Gap(true) {
@@ -312,7 +444,7 @@ fn file_expand_preserves_diff_comments_and_supports_full_file_navigation() {
                     assert_eq!(view.rows.get(row + 1), Some(&Row::Gap(false)));
                 }
             }
-            assert_eq!(app.selected_ref().unwrap().comment, 0);
+            assert!(app.selected_ref().is_none());
         }
         let visibility = app.view().unwrap().context_visible.clone();
         app.set_split(!split).unwrap();
@@ -327,6 +459,8 @@ fn file_expand_preserves_diff_comments_and_supports_full_file_navigation() {
         press(&mut app, K::Char('Z'));
         draw(&mut app, &mut terminal);
         assert!(app.view().unwrap().expanded.is_none());
+        assert!(app.view().unwrap().rows.starts_with(&gaps));
+        assert!(app.view().unwrap().rows.ends_with(&gaps));
         assert_eq!(
             app.view().unwrap().source(app.cursor[0], app.side),
             Some(source)

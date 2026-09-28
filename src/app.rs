@@ -130,6 +130,7 @@ pub struct App {
     pub stacked: bool,
     pub cursor: [usize; 4],
     pub offset: usize,
+    pub expansion_scroll_from: Option<usize>,
     pub anchor: Option<(usize, usize)>,
     drag_start: Option<(usize, usize)>,
     divider_drag: Option<(u16, i32)>,
@@ -236,6 +237,7 @@ impl App {
             stacked: false,
             cursor: [0; 4],
             offset: 0,
+            expansion_scroll_from: None,
             anchor: None,
             drag_start: None,
             divider_drag: None,
@@ -353,10 +355,15 @@ impl App {
             if self.cache.len() == 2 {
                 self.cache.pop_front();
             }
-            self.cache.push_back((
-                file,
-                FileView::new(&self.review.files[file], self.split_for(file)),
-            ));
+            let f = &self.review.files[file];
+            let split = self.split_for(file);
+            let mut view = FileView::new(f, split);
+            view.trailing_context =
+                review::has_trailing_context(&self.review.root, f).unwrap_or(false);
+            if view.trailing_context {
+                view.rebuild_rows(f, split);
+            }
+            self.cache.push_back((file, view));
         } else if let Some(pos) = self.cache.iter().position(|(i, _)| *i == file) {
             let entry = self.cache.remove(pos).unwrap();
             self.cache.push_back(entry);
@@ -370,6 +377,7 @@ impl App {
         let file = self.file.context("no selected file")?;
         let view = self.view().unwrap();
         let collapse = full && view.expanded.is_some();
+        let trailing_context = view.trailing_context;
         if !full && view.expanded.is_some() && view.context_visible.is_none() {
             self.status = "All context is already visible · Z: collapse".into();
             return Ok(());
@@ -389,25 +397,27 @@ impl App {
         let screen_row = self.cursor[0].saturating_sub(self.offset);
         let f = &self.review.files[file];
         if collapse || view.expanded.is_none() {
-            let next = if collapse {
+            let mut next = if collapse {
                 FileView::new(f, self.split())
             } else {
                 FileView::expand(f, review::expand_file(&self.review, f)?, self.split())?
             };
+            next.trailing_context = trailing_context;
             *self.view_mut().unwrap() = next;
         }
         let split = self.split();
         let view = &mut self.cache.iter_mut().find(|(i, _)| *i == file).unwrap().1;
         view.layout(self.diff_inner.width as usize, self.bias, self.wrap);
-        let display = if collapse { None } else { display }.or_else(|| {
+        let mut display = if collapse { None } else { display }.or_else(|| {
             source
                 .and_then(|i| view.visual_for_source(i, self.side))
                 .and_then(|row| view.display_source(row, self.side))
         });
+        let previous_display = display;
         if full {
             view.context_visible = None;
         } else {
-            view.expand_near(display.unwrap_or(0));
+            display = view.expand_near(display.unwrap_or(0)).or(display);
         }
         view.rebuild_rows(&self.review.files[file], split);
         view.layout(self.diff_inner.width as usize, self.bias, self.wrap);
@@ -416,6 +426,14 @@ impl App {
             .unwrap_or(0);
         self.anchor = anchor.and_then(|(i, side)| Some((view.visual_for_source(i, side)?, side)));
         self.offset = self.cursor[0].saturating_sub(screen_row);
+        self.expansion_scroll_from = if !full && display != previous_display {
+            previous_display
+                .and_then(|i| view.visual_for_display(i, self.side))
+                .map(|row| row.saturating_sub(screen_row))
+                .filter(|offset| *offset != self.offset)
+        } else {
+            None
+        };
         self.status = if collapse {
             "Diff context restored"
         } else if full {
@@ -447,7 +465,19 @@ impl App {
                 view.starts[row] + part.min(view.starts[row + 1] - view.starts[row] - 1);
         }
         if let Some(view) = self.view() {
-            self.cursor[0] = self.cursor[0].min(view.len().saturating_sub(1));
+            let cursor = self.cursor[0].min(view.len().saturating_sub(1));
+            // Gap labels are not source lines; initial focus must still support line comments.
+            self.cursor[0] = if view
+                .locate(cursor)
+                .is_some_and(|(row, _)| matches!(view.rows[row], Row::Gap(_)))
+            {
+                (cursor..view.len())
+                    .chain((0..cursor).rev())
+                    .find(|&row| view.selectable(row, self.side))
+                    .unwrap_or(cursor)
+            } else {
+                cursor
+            };
         }
         // Selection and an in-progress drag must follow the same source rows as the cursor.
         [self.anchor, self.drag_start] = range_anchors.map(|anchor| {
@@ -1434,6 +1464,7 @@ impl App {
         Ok(())
     }
     pub fn handle(&mut self, event: Event) -> Result<Effect> {
+        self.expansion_scroll_from = None;
         if matches!(event, Event::Resize(..)) {
             self.pane_drag = None;
         }

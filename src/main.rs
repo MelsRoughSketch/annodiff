@@ -15,7 +15,7 @@ use std::{
     io::{self, Write},
     path::Path,
     process::{Command, Stdio},
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 #[cfg(unix)]
@@ -154,17 +154,50 @@ fn send(
     }
     Ok(())
 }
+const EXPANSION_SCROLL_TIME: Duration = Duration::from_millis(180);
+
+fn scroll_offset(from: usize, to: usize, elapsed: Duration) -> usize {
+    let progress = (elapsed.as_secs_f64() / EXPANSION_SCROLL_TIME.as_secs_f64()).min(1.0);
+    let eased = progress * progress * (3.0 - 2.0 * progress); // Smoothstep: ease in and out.
+    (from as f64 + (to as f64 - from as f64) * eased).round() as usize
+}
+
 fn run(mut app: App) -> Result<()> {
     let _restore = Restore;
     let mut terminal = init()?;
     let mut dirty = true;
+    let mut displayed_offset = app.offset;
+    let mut expansion_scroll: Option<(Instant, usize)> = None;
     loop {
-        dirty |= app.poll() || app.highlight_pending;
+        let changed = app.poll();
+        if changed {
+            expansion_scroll = None;
+        }
+        dirty |= changed || app.highlight_pending || expansion_scroll.is_some();
         if dirty {
-            terminal.draw(|f| app.draw(f))?;
+            if expansion_scroll.is_some_and(|(start, _)| start.elapsed() >= EXPANSION_SCROLL_TIME) {
+                expansion_scroll = None;
+            }
+            let (target, manual) = (app.offset, app.manual_scroll[0]);
+            if let Some((start, from)) = expansion_scroll {
+                let max = app.view().map_or(0, |v| {
+                    v.len().saturating_sub(app.diff_inner.height as usize)
+                });
+                app.offset = scroll_offset(from.min(max), target.min(max), start.elapsed());
+                app.manual_scroll[0] = true;
+            }
+            let result = terminal.draw(|f| app.draw(f));
+            displayed_offset = app.offset;
+            if expansion_scroll.is_some() {
+                app.offset = target;
+                app.manual_scroll[0] = manual;
+            }
+            result?;
             dirty = false;
         }
-        if !event::poll(Duration::from_millis(if app.highlight_pending {
+        if !event::poll(Duration::from_millis(if expansion_scroll.is_some() {
+            16
+        } else if app.highlight_pending {
             0
         } else {
             50
@@ -172,6 +205,14 @@ fn run(mut app: App) -> Result<()> {
             continue;
         }
         let event = event::read()?;
+        if matches!(event, event::Event::Key(key) if key.kind == event::KeyEventKind::Release) {
+            continue;
+        }
+        if expansion_scroll.is_some() && matches!(event, event::Event::Mouse(_)) {
+            // Hit-test against the rows actually visible when the mouse was used.
+            app.offset = displayed_offset;
+        }
+        expansion_scroll = None;
         dirty = true;
         let effect = match app.handle(event) {
             Ok(effect) => effect,
@@ -180,6 +221,10 @@ fn run(mut app: App) -> Result<()> {
                 continue;
             }
         };
+        expansion_scroll = app
+            .expansion_scroll_from
+            .take()
+            .map(|from| (Instant::now(), from));
         let result = match effect {
             Effect::None => Ok(()),
             Effect::Quit => {
@@ -223,6 +268,35 @@ fn run(mut app: App) -> Result<()> {
         }
     }
     Ok(())
+}
+
+#[test]
+fn expansion_scroll_is_bounded_monotonic_and_finishes_on_time() {
+    let positions =
+        [0, 45, 90, 135, 180].map(|ms| scroll_offset(0, 100, Duration::from_millis(ms)));
+    assert_eq!(positions[2], 50);
+    assert!(positions[1] - positions[0] < positions[2] - positions[1]);
+    assert!(positions[4] - positions[3] < positions[3] - positions[2]);
+    assert_eq!(positions[1], 100 - positions[3]);
+    for (from, to) in [(0, 30), (30, 0), (12, 12)] {
+        let mut previous = from;
+        for ms in 0..=200 {
+            let offset = scroll_offset(from, to, Duration::from_millis(ms));
+            assert!((from.min(to)..=from.max(to)).contains(&offset));
+            if from <= to {
+                assert!(offset >= previous);
+            } else {
+                assert!(offset <= previous);
+            }
+            if ms == 0 {
+                assert_eq!(offset, from);
+            }
+            if ms >= 180 {
+                assert_eq!(offset, to);
+            }
+            previous = offset;
+        }
+    }
 }
 fn main() {
     if let Err(e) = main_result() {

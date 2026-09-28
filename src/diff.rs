@@ -95,6 +95,7 @@ pub struct Token {
 
 pub struct FileView {
     pub expanded: Option<File>,
+    pub trailing_context: bool,
     pub context_visible: Option<Vec<bool>>,
     source_indices: Vec<Option<usize>>,
     display_indices: Vec<Option<usize>>,
@@ -183,6 +184,7 @@ impl FileView {
         }
         let mut view = Self {
             expanded: None,
+            trailing_context: false,
             context_visible: None,
             source_indices: Vec::new(),
             display_indices: Vec::new(),
@@ -226,6 +228,10 @@ impl FileView {
     pub fn rebuild_rows(&mut self, file: &File, split: bool) {
         let Some(mut expanded) = self.expanded.take() else {
             self.rebuild_display_rows(file, split);
+            if self.trailing_context {
+                self.rows
+                    .extend([Row::Gap(false), Row::Gap(true), Row::Gap(false)]);
+            }
             return;
         };
         expanded.comments = file.comments.clone();
@@ -327,7 +333,7 @@ impl FileView {
             Some(display)
         }
     }
-    pub fn expand_near(&mut self, display: usize) {
+    pub fn expand_near(&mut self, display: usize) -> Option<usize> {
         let file = self.expanded.as_ref().unwrap();
         let visible = self.context_visible.get_or_insert_with(|| {
             file.lines
@@ -336,24 +342,24 @@ impl FileView {
                 .map(|(i, l)| self.source_indices[i].is_some() || l.old == 0 && l.new == 0)
                 .collect()
         });
-        let Some(next) = (0..visible.len())
+        let next = (0..visible.len())
             .filter(|i| !visible[*i])
-            .min_by_key(|i| i.abs_diff(display))
-        else {
-            return;
-        };
+            .min_by_key(|i| i.abs_diff(display))?;
         let step = if next < display { -1 } else { 1 };
         let mut i = next;
+        let mut last = next;
         for _ in 0..10 {
             if visible[i] {
                 break;
             }
             visible[i] = true;
+            last = i;
             let Some(next) = i.checked_add_signed(step).filter(|i| *i < visible.len()) else {
                 break;
             };
             i = next;
         }
+        Some(last)
     }
     fn rebuild_display_rows(&mut self, file: &File, split: bool) {
         self.split = split;
@@ -447,7 +453,7 @@ impl FileView {
                     .map(|i| file.lines[*i].new)
                     .max()
                     .unwrap_or(0);
-                if last_hunk != hunk && (old > 0 && o > old + 1 || new > 0 && n > new + 1) {
+                if last_hunk != hunk && (o > old + 1 || n > new + 1) {
                     self.rows
                         .extend([Row::Gap(false), Row::Gap(true), Row::Gap(false)]);
                 }
