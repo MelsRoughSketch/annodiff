@@ -1401,6 +1401,8 @@ impl App {
             K::PageDown => self.move_selection(page, None),
             K::Home => self.move_selection(1, Some(0)),
             K::End => self.move_selection(-1, Some(usize::MAX)),
+            K::Char('+') if self.pane == 0 => self.zoom = 2,
+            K::Char('-') if self.pane == 0 => self.zoom = 0,
             K::Char('+') => self.zoom = (self.zoom + 1).min(2),
             K::Char('-') => self.zoom = self.zoom.saturating_sub(1),
             K::Char('r') => self.refresh(false)?,

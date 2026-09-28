@@ -1098,7 +1098,7 @@ Global
 0/1/2/3: focus Diff / Files / Comments / Commits
 h/l or ←→: focus previous/next pane or diff side
 Tab: move focus to the next pane
-+/-: expand/shrink pane (normal / tall / full)
++/-: expand/shrink pane (Diff: normal / full; others: normal / tall / full)
 Ctrl+Enter/F2: preview and send unsent Open comments
 r: reload diff and file/commit lists   R: choose Archive or Reset all comments   q: quit the app
 
@@ -1244,7 +1244,11 @@ fn help_lines(app: &App) -> Vec<Line<'static>> {
                 "e: edit a comment in your external editor",
                 "←→/hl/0/1/2/3: focus Diff / Files / Comments / Commits",
                 "Tab: move focus to the next pane",
-                "+/-: expand/shrink pane (normal / tall / full)",
+                if app.pane == 0 {
+                    "+/-: expand/shrink pane (normal / full)"
+                } else {
+                    "+/-: expand/shrink pane (normal / tall / full)"
+                },
                 "r: reload diff and file/commit lists",
                 "q: quit the app",
             ]);
