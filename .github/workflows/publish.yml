@@ -2,7 +2,13 @@ name: Publish to crates.io
 
 on:
   release:
-    types: [published]
+    types: [published, released]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing stable release tag to publish (e.g. v0.2.0)
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -12,12 +18,74 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  prepare:
+    if: >-
+      (github.event_name == 'release' && !github.event.release.prerelease) ||
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      sha: ${{ steps.release.outputs.sha }}
+      publish: ${{ steps.release.outputs.publish }}
+    env:
+      RELEASE_TAG: ${{ inputs.tag || github.event.release.tag_name }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          ref: refs/tags/${{ env.RELEASE_TAG }}
+      - name: Validate release and resolve commit
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+            --json tagName,isDraft,isPrerelease > "$RUNNER_TEMP/release.json"
+          python3 - <<'PY'
+          import json
+          import os
+          import subprocess
+          import tomllib
+          import urllib.error
+          import urllib.request
+          from pathlib import Path
+
+          release = json.loads((Path(os.environ["RUNNER_TEMP"]) / "release.json").read_text())
+          with open("Cargo.toml", "rb") as manifest:
+              package = tomllib.load(manifest)["package"]
+          version = package["version"]
+          tag = os.environ["RELEASE_TAG"]
+          if release["isDraft"] or release["isPrerelease"]:
+              raise SystemExit("Only published stable releases can be published to crates.io")
+          if release["tagName"] != tag or tag != f"v{version}" or package["name"] != "annodiff":
+              raise SystemExit("Release tag must match the annodiff package version")
+          sha = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
+          request = urllib.request.Request(
+              f"https://crates.io/api/v1/crates/annodiff/{version}",
+              headers={"User-Agent": "annodiff release workflow"},
+          )
+          try:
+              with urllib.request.urlopen(request, timeout=30):
+                  publish = False
+          except urllib.error.HTTPError as error:
+              if error.code != 404:
+                  raise
+              publish = True
+          with open(os.environ["GITHUB_OUTPUT"], "a") as output:
+              print(f"sha={sha}", file=output)
+              print(f"publish={str(publish).lower()}", file=output)
+          print(f"{tag} at {sha}: {'ready to publish' if publish else 'already published; skipping'}")
+          PY
+
   ci:
-    if: ${{ !github.event.release.prerelease }}
+    needs: prepare
+    if: ${{ needs.prepare.outputs.publish == 'true' }}
     uses: ./.github/workflows/ci.yml
+    with:
+      ref: ${{ needs.prepare.outputs.sha }}
 
   publish:
-    needs: ci
+    needs: [prepare, ci]
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     environment: crates-io
@@ -28,19 +96,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
-      - name: Check release tag matches crate version
-        env:
-          RELEASE_TAG: ${{ github.event.release.tag_name }}
-        run: |
-          python3 - <<'PY'
-          import os
-          import tomllib
-          with open("Cargo.toml", "rb") as manifest:
-              version = tomllib.load(manifest)["package"]["version"]
-          expected = f"v{version}"
-          if os.environ["RELEASE_TAG"] != expected:
-              raise SystemExit(f"Release tag must be {expected}")
-          PY
+          ref: ${{ needs.prepare.outputs.sha }}
       - name: Install stable Rust
         run: |
           rustup toolchain install stable --profile minimal

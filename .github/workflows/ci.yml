@@ -6,6 +6,11 @@ on:
   pull_request:
   workflow_dispatch:
   workflow_call:
+    inputs:
+      ref:
+        description: Commit to test (defaults to the triggering ref)
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -26,6 +31,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
+          ref: ${{ inputs.ref }}
       - name: Install stable Rust
         run: |
           rustup toolchain install stable --profile minimal --component rustfmt --component clippy
@@ -36,6 +42,10 @@ jobs:
       - run: cargo test --locked --offline
       - run: python3 tests/cli.py
       - run: python3 tests/terminal.py
+      - name: Check release workflow validation
+        # Release CI may check an older tag that predates this workflow test.
+        if: ${{ inputs.ref == '' }}
+        run: python3 tests/release_workflow.py
       - run: python3 licenses/generate.py --check
 
   msrv:
@@ -46,6 +56,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
+          ref: ${{ inputs.ref }}
       - name: Install minimum supported Rust
         run: rustup toolchain install 1.88.0 --profile minimal
       - run: cargo +1.88.0 check --locked --all-targets

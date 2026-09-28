@@ -35,6 +35,12 @@ The Files pane groups files in a directory tree. Use Up/Down or j/k to navigate 
 - [Configuration](config.example.toml)
 - [Benchmarks](benchmarks/README.md)
 
+## Releasing
+
+After merging a version update, publish a stable GitHub Release with a matching tag (for example, `v0.2.0`). Promoting a pre-release to a stable release also starts the crates.io publish workflow.
+
+To retry an existing stable release, open **Actions → Publish to crates.io → Run workflow**, select **main**, and enter its tag. The workflow validates the release, runs CI against the tag's exact commit, and publishes that same commit. Already-published crate versions are skipped. The `crates-io` environment must allow the `main` branch for manual retries, alongside its `v*` tag rule.
+
 ## License
 
 Licensed under either [MIT](LICENSE-MIT) or [Apache-2.0](LICENSE-APACHE), at your option.
