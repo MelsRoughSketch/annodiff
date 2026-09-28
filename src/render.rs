@@ -127,7 +127,7 @@ fn list<'a, T: Clone + Into<Line<'a>>>(
         let gutter = if marker { 2.min(rect.width) } else { 0 };
         let area = Rect::new(rect.x + gutter, y, rect.width - gutter, 1);
         let row_background = if marker && focus && line == cursor {
-            Color::Rgb(64, 64, 64)
+            Color::Rgb(84, 84, 84)
         } else {
             Color::Reset
         };

@@ -1563,10 +1563,10 @@ fn sidebar_selection_uses_moving_marker_without_overriding_text_colors() {
     assert_eq!(b[(x, y)].fg, ratatui::style::Color::Rgb(80, 220, 220));
     // Marker + space + two status columns + space: file name retains yellow.
     assert_eq!(b[(x + 5, y)].fg, ratatui::style::Color::Rgb(255, 255, 0));
-    assert_eq!(b[(x + 5, y)].bg, ratatui::style::Color::Rgb(64, 64, 64));
+    assert_eq!(b[(x + 5, y)].bg, ratatui::style::Color::Rgb(84, 84, 84));
     assert_eq!(
         b[(rect.right() - 2, y)].bg,
-        ratatui::style::Color::Rgb(64, 64, 64)
+        ratatui::style::Color::Rgb(84, 84, 84)
     );
     press(&mut app, K::Down);
     draw(&mut app, &mut terminal);
@@ -1583,7 +1583,7 @@ fn sidebar_selection_uses_moving_marker_without_overriding_text_colors() {
         let marker = &terminal.backend().buffer()[(rect.x + 1, rect.y + 1)];
         assert_eq!(marker.symbol(), "▶");
         assert_eq!(marker.fg, ratatui::style::Color::Rgb(80, 220, 220));
-        assert_eq!(marker.bg, ratatui::style::Color::Rgb(64, 64, 64));
+        assert_eq!(marker.bg, ratatui::style::Color::Rgb(84, 84, 84));
         assert_eq!(
             terminal.backend().buffer()[(x + 5, y + 1)].bg,
             ratatui::style::Color::Reset
