@@ -1,4 +1,5 @@
 use anyhow::{Context, Result, bail, ensure};
+use base64::{Engine, engine::general_purpose::STANDARD};
 use serde::{Deserialize, Deserializer, Serialize};
 use std::{
     collections::{HashMap, HashSet},
@@ -458,6 +459,33 @@ pub fn parse(patch: &str) -> Vec<Line> {
         })
         .collect()
 }
+fn diff_file(path: &str, bytes: Vec<u8>) -> File {
+    let (patch, lines) = match String::from_utf8(bytes) {
+        Ok(patch) => {
+            let lines = parse(&patch);
+            (patch, lines)
+        }
+        Err(error) => {
+            // Preserve exact bytes for freshness checks and comment history, never lossy excerpts.
+            let patch = format!(
+                "Non-UTF-8 diff (base64):\n{}",
+                STANDARD.encode(error.into_bytes())
+            );
+            let lines = vec![Line {
+                text: "Diff is not UTF-8; source cannot be displayed. Use c in Files for a file comment.".into(),
+                ..Line::default()
+            }];
+            (patch, lines)
+        }
+    };
+    File {
+        path: path.into(),
+        patch,
+        lines,
+        comments: Vec::new(),
+    }
+}
+
 pub fn snapshot(root: &str, base: &str, target: &str) -> Result<Review> {
     let resolve = |s: &str| -> Result<String> {
         if s.is_empty() {
@@ -568,8 +596,10 @@ pub fn snapshot(root: &str, base: &str, target: &str) -> Result<Review> {
         args.extend(["--raw", "-z", "--patch"]);
         args.extend(&revisions);
         args.push("--");
-        let output = String::from_utf8(git(root, &args)?)?;
-        if let Some((metadata, patch)) = output.split_once("\0\0") {
+        // ponytail: non-UTF-8 batches use the per-file fallback; split raw bytes if this becomes slow.
+        if let Ok(output) = String::from_utf8(git(root, &args)?)
+            && let Some((metadata, patch)) = output.split_once("\0\0")
+        {
             let fields: Vec<_> = metadata.split('\0').collect();
             let mut starts = vec![0];
             starts.extend(patch.match_indices("\ndiff --git ").map(|(i, _)| i + 1));
@@ -602,12 +632,7 @@ pub fn snapshot(root: &str, base: &str, target: &str) -> Result<Review> {
         }
         ensure!(local_path(path), "invalid Git file path: {path:?}");
         if let Some(patch) = patches.remove(path) {
-            review.files.push(File {
-                path: path.into(),
-                lines: parse(&patch),
-                patch,
-                comments: Vec::new(),
-            });
+            review.files.push(diff_file(path, patch.into_bytes()));
             continue;
         }
         let mut args = diff_args.clone();
@@ -633,16 +658,8 @@ pub fn snapshot(root: &str, base: &str, target: &str) -> Result<Review> {
             "{path}: git: {}",
             String::from_utf8_lossy(&output.stderr)
         );
-        // Refuse invalid UTF-8 rather than silently changing saved source excerpts.
-        let patch = String::from_utf8(output.stdout)
-            .with_context(|| format!("{path}: diff is not UTF-8"))?;
-        if !patch.is_empty() {
-            review.files.push(File {
-                path: path.into(),
-                lines: parse(&patch),
-                patch,
-                comments: Vec::new(),
-            });
+        if !output.stdout.is_empty() {
+            review.files.push(diff_file(path, output.stdout));
         }
     }
     Ok(review)
