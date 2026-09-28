@@ -10,6 +10,7 @@ use ratatui::{
     text::{Line, Span},
     widgets::{Block, Borders, Clear, Paragraph, Wrap},
 };
+use ratatui_textarea::TextArea;
 use unicode_width::UnicodeWidthStr;
 
 const SELECT: Color = Color::LightCyan;
@@ -696,9 +697,44 @@ fn draw_diff(app: &mut App, frame: &mut Frame) {
             true,
         ));
         editor.input.set_cursor_line_style(Style::default());
-        frame.render_widget(&editor.input, editor_rect);
+        draw_input(frame, editor_rect, &mut editor.input, app.modal.is_none());
     }
 }
+fn draw_input(frame: &mut Frame, area: Rect, input: &mut TextArea<'_>, focused: bool) {
+    // TextArea exposes no viewport offset. Its rendered cursor already accounts
+    // for scrolling, tabs and wide characters; use it as the terminal's IME anchor.
+    let inner = input
+        .block()
+        .map_or(area, |block| block.inner(area))
+        .intersection(frame.area());
+    for attempt in 0..2 {
+        frame.render_widget(&*input, area);
+        if !focused || inner.is_empty() {
+            return;
+        }
+        for y in inner.y..inner.bottom() {
+            for x in inner.x..inner.right() {
+                let cell = &mut frame.buffer_mut()[(x, y)];
+                if cell.modifier.contains(ratatui::style::Modifier::REVERSED) {
+                    // Use the native cursor alone; a reversed blank would leave
+                    // a solid block even while the terminal cursor blinks off.
+                    cell.modifier.remove(ratatui::style::Modifier::REVERSED);
+                    frame.set_cursor_position((x, y));
+                    return;
+                }
+            }
+        }
+        if attempt == 0 && input.screen_cursor().col >= usize::from(inner.width) {
+            // A scroll offset inside a wide glyph can clip the end cursor.
+            // Advancing one cell aligns the viewport without changing the text.
+            input.scroll((0, 1));
+            frame.render_widget(Clear, inner);
+        } else {
+            return;
+        }
+    }
+}
+
 fn background(
     app: &App,
     f: &File,
@@ -839,7 +875,7 @@ fn draw_modal(
             );
             frame.render_widget(Clear, rect);
             input.set_block(block(" / Search / filter ", true));
-            frame.render_widget(&*input, rect);
+            draw_input(frame, rect, input, true);
         }
         Modal::Help {
             scroll,
@@ -862,7 +898,7 @@ fn draw_modal(
                 let search_rect = Rect::new(inner.x, inner.bottom() - height, inner.width, height);
                 inner.height -= height;
                 input.set_block(block(" Search help · Enter: apply · Esc: clear ", true));
-                frame.render_widget(&*input, search_rect);
+                draw_input(frame, search_rect, input, true);
             }
             let lines: Vec<_> = help
                 .unwrap_or_default()
@@ -995,7 +1031,7 @@ fn draw_modal(
             *selection = (*selection).min(labels.len().saturating_sub(1));
             let search_area = Rect::new(area.x, area.y, area.width, 3.min(area.height));
             input.set_block(block(" Search Codex sessions ", search));
-            frame.render_widget(&*input, search_area);
+            draw_input(frame, search_area, input, search);
             let list_area = Rect::new(
                 area.x,
                 search_area.bottom(),
