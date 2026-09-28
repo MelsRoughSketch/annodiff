@@ -124,6 +124,10 @@ print("fake-editor-finished", flush=True)
             return json.loads(state.read_text())
 
         def check_navigation():
+            start = len(output)
+            send("t")
+            wait_for(lambda: b"Stacked" in output[start:], "stacked layout")
+            send("1230t")
             send("?")
             send("/wrapping\r")
             send("q")  # Closes help without quitting.

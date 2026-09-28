@@ -110,6 +110,7 @@ pub struct App {
     pub wrap: bool,
     pub bias: i32,
     pub sidebar_percent: i32,
+    pub stacked: bool,
     pub cursor: [usize; 4],
     pub offset: usize,
     pub anchor: Option<(usize, usize)>,
@@ -211,6 +212,7 @@ impl App {
             wrap: false,
             bias: 0,
             sidebar_percent: 30,
+            stacked: false,
             cursor: [0; 4],
             offset: 0,
             anchor: None,
@@ -288,13 +290,21 @@ impl App {
     fn set_sidebar_percent(&mut self, percent: i32) {
         self.sidebar_percent = percent.clamp(10, 90);
         self.status = format!(
-            "Pane width · sidebar {}% / diff {}%",
+            "Pane {} · sidebar {}% / diff {}%",
+            if self.stacked { "height" } else { "width" },
             self.sidebar_percent,
             100 - self.sidebar_percent
         );
     }
     pub fn split_for(&self, file: usize) -> bool {
         self.review.split_file(file)
+    }
+    pub(crate) fn pane_axis(&self) -> (u16, u16) {
+        if self.stacked {
+            (self.pane_area.y, self.pane_area.height)
+        } else {
+            (self.pane_area.x, self.pane_area.width)
+        }
     }
     pub fn split(&self) -> bool {
         self.file.is_some_and(|file| self.split_for(file))
@@ -1220,16 +1230,20 @@ impl App {
             if self.editor.is_some() || self.modal.is_some() {
                 return Ok(Effect::None);
             }
+            let position = if self.stacked {
+                mouse.row
+            } else {
+                mouse.column
+            };
+            let (origin, extent) = self.pane_axis();
             if matches!(
                 mouse.kind,
                 MouseEventKind::Drag(MouseButton::Left) | MouseEventKind::Up(MouseButton::Left)
             ) {
-                if let Some((start_x, percent)) = self.pane_drag {
+                if let Some((start, percent)) = self.pane_drag {
                     if self.zoom < 2 && !self.pane_area.is_empty() {
-                        let delta = i32::from(mouse.column) - i32::from(start_x);
-                        self.set_sidebar_percent(
-                            percent + delta * 100 / i32::from(self.pane_area.width),
-                        );
+                        let delta = i32::from(position) - i32::from(start);
+                        self.set_sidebar_percent(percent + delta * 100 / i32::from(extent));
                     }
                     if mouse.kind == MouseEventKind::Up(MouseButton::Left) {
                         self.pane_drag = None;
@@ -1273,16 +1287,19 @@ impl App {
                 self.drag_start = None;
                 self.divider_drag = None;
                 self.pane_drag = None;
-                let sidebar_width =
-                    (i32::from(self.pane_area.width) * self.sidebar_percent / 100) as u16;
-                let boundary = self.pane_area.x + sidebar_width;
+                let sidebar_size = (i32::from(extent) * self.sidebar_percent / 100) as u16;
+                let boundary = origin + sidebar_size;
                 if self.zoom < 2
-                    && sidebar_width > 0
-                    && sidebar_width < self.pane_area.width
+                    && sidebar_size > 0
+                    && sidebar_size < extent
                     && self.pane_area.contains((mouse.column, mouse.row).into())
-                    && (mouse.column == boundary || mouse.column == boundary - 1)
+                    && (position == boundary || position == boundary - 1)
+                    && !self
+                        .diff_mode_rects
+                        .iter()
+                        .any(|r| r.contains((mouse.column, mouse.row).into()))
                 {
-                    self.pane_drag = Some((mouse.column, self.sidebar_percent));
+                    self.pane_drag = Some((position, self.sidebar_percent));
                     return Ok(Effect::None);
                 }
                 if self.split()
@@ -1444,8 +1461,17 @@ impl App {
             K::PageDown => self.move_selection(page, None),
             K::Home => self.move_selection(1, Some(0)),
             K::End => self.move_selection(-1, Some(usize::MAX)),
-            K::Char('+') if self.pane == 0 => self.zoom = 2,
-            K::Char('-') if self.pane == 0 => self.zoom = 0,
+            K::Char('t') => {
+                self.stacked = !self.stacked;
+                self.status = if self.stacked {
+                    "Stacked layout · 1/2/3: top pane · 0: Diff · t: side-by-side layout"
+                } else {
+                    "Side-by-side layout · t: stacked layout"
+                }
+                .into();
+            }
+            K::Char('+') if self.stacked || self.pane == 0 => self.zoom = 2,
+            K::Char('-') if self.stacked || self.pane == 0 => self.zoom = 0,
             K::Char('+') => self.zoom = (self.zoom + 1).min(2),
             K::Char('-') => self.zoom = self.zoom.saturating_sub(1),
             K::Char('{' | '}') if self.zoom < 2 => {

@@ -164,6 +164,7 @@ fn list<'a, T: Clone + Into<Line<'a>>>(
 pub fn draw(app: &mut App, frame: &mut Frame) {
     app.highlight_pending = false;
     let area = frame.area();
+    app.diff_inner = Rect::default();
     app.pane_area = Rect::new(area.x, area.y, area.width, area.height.saturating_sub(2));
     if area.width == 0 || area.height == 0 {
         return;
@@ -172,14 +173,35 @@ pub fn draw(app: &mut App, frame: &mut Frame) {
     app.pane_rects = [Rect::default(); 4];
     app.diff_mode_rects = [Rect::default(); 2];
     let full = app.zoom == 2;
-    let sidebar_width = if full {
-        if app.pane == 0 { 0 } else { main.width }
+    let (_, extent) = app.pane_axis();
+    let sidebar_size = if full {
+        if app.pane == 0 { 0 } else { extent }
     } else {
-        (i32::from(main.width) * app.sidebar_percent / 100) as u16
+        (i32::from(extent) * app.sidebar_percent / 100) as u16
     };
-    let sidebar = Rect::new(main.x, main.y, sidebar_width, main.height);
-    if sidebar.width > 0 {
-        if app.zoom > 0 {
+    let (sidebar, detail) = if app.stacked {
+        (
+            Rect::new(main.x, main.y, main.width, sidebar_size),
+            Rect::new(
+                main.x,
+                main.y + sidebar_size,
+                main.width,
+                main.height - sidebar_size,
+            ),
+        )
+    } else {
+        (
+            Rect::new(main.x, main.y, sidebar_size, main.height),
+            Rect::new(
+                main.x + sidebar_size,
+                main.y,
+                main.width - sidebar_size,
+                main.height,
+            ),
+        )
+    };
+    if !sidebar.is_empty() {
+        if app.stacked || app.zoom > 0 {
             app.pane_rects[app.left_pane] = sidebar;
         } else {
             let h = sidebar.height / 3;
@@ -259,13 +281,7 @@ pub fn draw(app: &mut App, frame: &mut Frame) {
             true,
         );
     }
-    let detail = Rect::new(
-        main.x + sidebar_width,
-        main.y,
-        main.width - sidebar_width,
-        main.height,
-    );
-    if detail.width > 0 {
+    if !detail.is_empty() {
         if app.pane == 2
             && let Some(value) = &app.inspection
         {
@@ -302,7 +318,7 @@ pub fn draw(app: &mut App, frame: &mut Frame) {
                 "q: quit · ↑↓/PgUp/PgDn: scroll · Tab: pane · Enter/Ctrl+Enter/F2: send/copy · Esc: cancel"
             }
             Some(_) => "↑↓/PgUp/PgDn: scroll · Tab: pane · Esc: close",
-            None => "?: help · 0/1/2/3: pane · h/l: pane/side · +/-: zoom · q: quit",
+            None => "?: help · t: layout · 0/1/2/3: pane · h/l: pane/side · +/-: zoom · q: quit",
         }
     };
     frame.render_widget(
@@ -1099,8 +1115,9 @@ Global
 0/1/2/3: focus Diff / Files / Comments / Commits
 h/l or ←→: focus previous/next pane or diff side
 Tab: move focus to the next pane
-+/-: expand/shrink pane (Diff: normal / full; others: normal / tall / full)
-{/}: shrink/widen focused pane side by 5% (normal / tall); drag the sidebar/Diff border to resize
+t: switch side-by-side / stacked layout (stacked: 1/2/3 select top pane, 0 focuses Diff below)
++/-: expand/shrink pane (Diff or stacked: normal / full; others: normal / tall / full)
+{/}: shrink/grow focused pane side by 5% (width in side-by-side, height in stacked); drag the sidebar/Diff border to resize
 Ctrl+Enter/F2: preview and send unsent Open comments
 r: reload diff and file/commit lists   R: choose Archive or Reset all comments   q: quit the app
 
@@ -1131,7 +1148,13 @@ First row: select to clear chosen commits
 "#;
 
 fn help_lines(app: &App) -> Vec<Line<'static>> {
+    let zoom_hint = if app.stacked || app.pane == 0 {
+        "+/-: expand/shrink pane (normal / full)"
+    } else {
+        "+/-: expand/shrink pane (normal / tall / full)"
+    };
     let mut hints = Vec::new();
+    hints.push("t: switch side-by-side / stacked layout; 1/2/3 select top pane in stacked layout");
     match app.pane {
         3 => hints.extend([
             "/: filter commits by hash, message or ref",
@@ -1140,7 +1163,7 @@ fn help_lines(app: &App) -> Vec<Line<'static>> {
             "↑↓/jk: move the selected commit",
             "Enter/Space: select/unselect up to two commits",
             "0/1/2/3: focus Diff / Files / Comments / Commits",
-            "+/-: expand/shrink pane (normal / tall / full)",
+            zoom_hint,
             "r: reload diff and file/commit lists",
             "?: show key bindings",
             "q: quit the app",
@@ -1167,7 +1190,7 @@ fn help_lines(app: &App) -> Vec<Line<'static>> {
                 "u: show all / Open comments (shared with Files)",
                 "o: show comments for current file / all files",
                 "←→/hl/0/1/2/3: focus Diff / Files / Comments / Commits",
-                "+/-: expand/shrink pane (normal / tall / full)",
+                zoom_hint,
                 "R: choose Archive or Reset all comments",
                 "q: quit the app",
             ]);
@@ -1246,11 +1269,7 @@ fn help_lines(app: &App) -> Vec<Line<'static>> {
                 "e: edit a comment in your external editor",
                 "←→/hl/0/1/2/3: focus Diff / Files / Comments / Commits",
                 "Tab: move focus to the next pane",
-                if app.pane == 0 {
-                    "+/-: expand/shrink pane (normal / full)"
-                } else {
-                    "+/-: expand/shrink pane (normal / tall / full)"
-                },
+                zoom_hint,
                 "r: reload diff and file/commit lists",
                 "q: quit the app",
             ]);
