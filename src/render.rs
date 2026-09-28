@@ -1135,7 +1135,7 @@ Ctrl+Enter/F2: preview and send unsent Open comments
 r: reload diff and file/commit lists   R: choose Archive or Reset all comments   q: quit the app
 
 Diff
-z: expand 10 nearby lines; Z: full file / collapse (additional context is read-only)
+z: expand 10 nearby lines; Z: collapse if expanded, otherwise full file (additional context is read-only)
 n/N: jump to next/previous diff hunk   s: switch unified / side-by-side display   f: toggle wrapping of long diff lines
 [: widen NEW side, narrow OLD side   ]: widen OLD side, narrow NEW side
 /: search text in the current diff   v: start/clear range; extend with j/k   c/Enter: add a comment to selected lines
@@ -1257,7 +1257,7 @@ fn help_lines(app: &App) -> Vec<Line<'static>> {
                 }
                 hints.extend([
                     "s: switch unified / side-by-side display",
-                    "z: expand 10 nearby lines; Z: full file / collapse (additional context is read-only)",
+                    "z: expand 10 nearby lines; Z: collapse if expanded, otherwise full file (additional context is read-only)",
                     if app.wrap {
                         "f: disable wrapping of long diff lines"
                     } else {

@@ -326,6 +326,13 @@ fn file_expand_preserves_diff_comments_and_supports_full_file_navigation() {
             .unwrap();
         press(&mut app, K::Char('Z'));
         draw(&mut app, &mut terminal);
+        assert!(app.view().unwrap().expanded.is_none());
+        assert_eq!(
+            app.view().unwrap().source(app.cursor[0], app.side),
+            Some(source)
+        );
+        press(&mut app, K::Char('Z'));
+        draw(&mut app, &mut terminal);
         press(&mut app, K::Char('z'));
         assert!(app.view().unwrap().context_visible.is_none());
         assert_eq!(

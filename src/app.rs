@@ -346,7 +346,7 @@ impl App {
         self.ensure_view();
         let file = self.file.context("no selected file")?;
         let view = self.view().unwrap();
-        let collapse = full && view.expanded.is_some() && view.context_visible.is_none();
+        let collapse = full && view.expanded.is_some();
         if !full && view.expanded.is_some() && view.context_visible.is_none() {
             self.status = "All context is already visible · Z: collapse".into();
             return Ok(());
@@ -398,7 +398,7 @@ impl App {
         } else if full {
             "Full file · Z: collapse · expanded context is read-only"
         } else {
-            "Context expanded · z: show 10 more nearby lines · Z: full file"
+            "Context expanded · z: show 10 more nearby lines · Z: collapse"
         }
         .into();
         Ok(())
