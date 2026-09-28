@@ -1,5 +1,5 @@
 use crate::{
-    app::{App, Confirmation, Inspection, Modal},
+    app::{App, Confirmation, FileRow, Inspection, Modal},
     diff::{FileView, Row},
     review::File,
 };
@@ -1247,6 +1247,7 @@ n/N: jump to next/previous diff hunk   s: switch unified / side-by-side display 
 x: toggle selected comment Done / Open   d: delete the selected comment   e: edit a comment in your external editor
 
 Files
+Enter/Space or click a directory: expand/collapse; matching paths stay expanded while filtering
 o: show all files / only files with matching comments
 u: filter Open / all comments (shared with Comments)
 /: filter files by path   n/N: jump to next/previous filtered file
@@ -1317,12 +1318,20 @@ fn help_lines(app: &App) -> Vec<Line<'static>> {
         _ => {
             if app.pane == 1 {
                 hints.extend([
+                    "Enter/Space/click directory: expand/collapse",
                     "o: show all files / only commented files",
                     "u: filter Open / all comments (shared with Comments)",
                 ]);
             }
             if let Some(file) = app.current() {
-                if app.pane == 1 {
+                if app.pane == 1
+                    && matches!(
+                        app.tree_rows.get(app.cursor[1]),
+                        Some(FileRow::Directory(_))
+                    )
+                {
+                    hints.push("↑↓/jk: move through the file tree");
+                } else if app.pane == 1 {
                     hints.extend([
                         "↑↓/jk: select a file and show its diff",
                         "Enter: focus Diff for the selected file",

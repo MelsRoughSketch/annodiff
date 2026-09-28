@@ -30,6 +30,8 @@ cargo build --release --locked
 
 Browse files and commits, select lines, and add comments. Preview reviews before sending or copying them. Press `?` for key bindings.
 
+The Files pane groups files in a directory tree. Use Up/Down or j/k to navigate and Enter, Space, or a click to expand/collapse directories. Path search (`/`) and comment filters (`o`, `u`) reveal matching files inside collapsed directories; clearing the filters restores your folds.
+
 - [Configuration](config.example.toml)
 - [Benchmarks](benchmarks/README.md)
 

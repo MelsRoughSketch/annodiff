@@ -3141,3 +3141,192 @@ fn send_preview_preserves_scroll_offset_and_cursor_margin() {
     draw(&mut app, &mut terminal);
     assert_eq!(selected_row(&terminal) + 1, before);
 }
+
+#[test]
+fn file_tree_navigation_filters_mouse_and_layout() {
+    use annodiff::app::FileRow::{Directory, File as Leaf};
+    use crossterm::event::{MouseButton, MouseEvent, MouseEventKind};
+    let dir = tempfile::tempdir().unwrap();
+    let mut files: Vec<_> = [
+        "README.md",
+        "src/lib.rs",
+        "src/nested/mod.rs",
+        "src2/other.rs",
+        "日本語/例.rs",
+    ]
+    .into_iter()
+    .map(|path| File {
+        path: path.into(),
+        ..fixture()
+    })
+    .collect();
+    files[2].comments.push(Comment {
+        file: true,
+        text: "review note".into(),
+        ..Default::default()
+    });
+    let mut app = App::new(
+        Review {
+            files,
+            statuses: [("src/nested/mod.rs".into(), " M".into())].into(),
+            ..Default::default()
+        },
+        dir.path().join("state.json"),
+    );
+    let expanded = vec![
+        Leaf(0),
+        Directory("src".into()),
+        Leaf(1),
+        Directory("src/nested".into()),
+        Leaf(2),
+        Directory("src2".into()),
+        Leaf(3),
+        Directory("日本語".into()),
+        Leaf(4),
+    ];
+    assert_eq!(app.tree_rows, expanded);
+    assert!(app.labels[1][4].to_string().contains("M mod.rs · 1 open"));
+    let mut terminal = Terminal::new(TestBackend::new(120, 36)).unwrap();
+    draw(&mut app, &mut terminal);
+    app.move_selection(0, Some(4));
+    assert_eq!(app.current().unwrap().path, "src/nested/mod.rs");
+    assert_eq!(app.refs.len(), 1);
+    press(&mut app, K::Up); // Directory navigation keeps the displayed diff.
+    assert_eq!(app.file, Some(2));
+    press(&mut app, K::Enter);
+    assert_eq!(app.pane, 1);
+    assert!(!app.tree_rows.contains(&Leaf(2)));
+    assert_eq!(app.file, Some(2));
+    assert!(matches!(press(&mut app, K::Char('e')), Effect::None));
+    press(&mut app, K::Char('c'));
+    assert!(app.editor.is_none());
+    app.move_selection(0, Some(1));
+    press(&mut app, K::Char(' '));
+    assert_eq!(
+        app.tree_rows,
+        [
+            Leaf(0),
+            Directory("src".into()),
+            Directory("src2".into()),
+            Leaf(3),
+            Directory("日本語".into()),
+            Leaf(4)
+        ]
+    );
+    app.rebuild_lists();
+    assert_eq!(app.cursor[1], 1);
+    // Search reveals the complete ancestor chain without losing either fold.
+    app.filter(1, "SRC/NESTED".into());
+    assert_eq!(app.tree_rows[app.cursor[1]], Leaf(2));
+    assert_eq!(
+        app.tree_rows,
+        [
+            Directory("src".into()),
+            Directory("src/nested".into()),
+            Leaf(2)
+        ]
+    );
+    press(&mut app, K::Char('n'));
+    assert_eq!(app.cursor[1], 2);
+    assert_eq!(app.file, Some(2));
+    app.filter(1, "absent".into());
+    assert!(app.tree_rows.is_empty());
+    assert!(app.file.is_none());
+    draw(&mut app, &mut terminal);
+    app.filter(1, String::new());
+    assert!(!app.tree_rows.contains(&Leaf(1)));
+    press(&mut app, K::Char('o'));
+    assert_eq!(
+        app.tree_rows,
+        [
+            Directory("src".into()),
+            Directory("src/nested".into()),
+            Leaf(2)
+        ]
+    );
+    press(&mut app, K::Char('o'));
+    assert!(!app.tree_rows.contains(&Leaf(2)));
+    // Click the collapsed directory row, then its nested directory, then a leaf.
+    let click = |app: &mut App, row: usize| {
+        let rect = app.pane_rects[1];
+        app.handle(Event::Mouse(MouseEvent {
+            kind: MouseEventKind::Down(MouseButton::Left),
+            column: rect.x + 2,
+            row: rect.y + 1 + (row - app.list_offsets[1]) as u16,
+            modifiers: M::NONE,
+        }))
+        .unwrap();
+    };
+    draw(&mut app, &mut terminal);
+    click(&mut app, 1);
+    assert!(app.tree_rows.contains(&Leaf(1)));
+    assert!(!app.tree_rows.contains(&Leaf(2)));
+    draw(&mut app, &mut terminal);
+    click(&mut app, 3);
+    assert_eq!(app.tree_rows, expanded);
+    draw(&mut app, &mut terminal);
+    click(&mut app, 4);
+    assert_eq!(app.file, Some(2));
+    press(&mut app, K::Enter);
+    assert_eq!(app.pane, 0);
+    app.focus(1);
+    app.move_selection(0, Some(1));
+    press(&mut app, K::Char(' '));
+    let folded = app.tree_rows.clone();
+    // Layout changes and narrow renders preserve the selected file and tree.
+    for (width, height) in [(40, 12), (20, 8), (80, 40)] {
+        terminal.backend_mut().resize(width, height);
+        press(&mut app, K::Char('t'));
+        draw(&mut app, &mut terminal);
+        assert_eq!(app.tree_rows, folded);
+        assert_eq!(app.file, Some(2));
+    }
+}
+
+#[test]
+fn file_tree_refresh_preserves_paths_and_folds_when_indices_change() {
+    use annodiff::app::FileRow::{Directory, File as Leaf};
+    let dir = tempfile::tempdir().unwrap();
+    let mut app = App::new(
+        Review {
+            files: ["src/a.rs", "src/b.rs", "tests/test.rs"]
+                .into_iter()
+                .map(|path| File {
+                    path: path.into(),
+                    ..fixture()
+                })
+                .collect(),
+            ..Default::default()
+        },
+        dir.path().join("state.json"),
+    );
+    app.move_selection(0, Some(2));
+    assert_eq!(app.current().unwrap().path, "src/b.rs");
+    app.move_selection(0, Some(0));
+    press(&mut app, K::Enter);
+    let mut next = app.review.clone();
+    next.files.insert(
+        0,
+        File {
+            path: "new.txt".into(),
+            ..fixture()
+        },
+    );
+    app.apply(next).unwrap();
+    assert_eq!(app.current().unwrap().path, "src/b.rs");
+    assert_eq!(app.tree_rows[app.cursor[1]], Directory("src".into()));
+    assert!(!app.tree_rows.contains(&Leaf(2)));
+    press(&mut app, K::Enter);
+    app.move_selection(0, Some(3));
+    assert_eq!(app.file, Some(2));
+    let mut next = app.review.clone();
+    next.files.remove(0);
+    app.apply(next).unwrap();
+    assert_eq!(app.current().unwrap().path, "src/b.rs");
+    assert_eq!(app.tree_rows[app.cursor[1]], Leaf(1));
+    let mut next = app.review.clone();
+    next.files.clear();
+    app.apply(next).unwrap();
+    assert!(app.file.is_none());
+    assert!(app.tree_rows.is_empty());
+}
