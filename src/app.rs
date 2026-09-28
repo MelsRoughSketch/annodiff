@@ -78,6 +78,10 @@ pub enum Modal {
         control: usize,
     },
     Sessions {
+        offset: usize,
+        manual_scroll: bool,
+        area: Rect,
+        filter_areas: [Rect; 3],
         items: Vec<agent::Session>,
         input: TextArea<'static>,
         selection: usize,
@@ -1273,6 +1277,10 @@ impl App {
                 return false;
             };
             self.modal = Some(Modal::Sessions {
+                offset: 0,
+                manual_scroll: false,
+                area: Rect::default(),
+                filter_areas: [Rect::default(); 3],
                 items,
                 input,
                 selection: 0,
@@ -1333,12 +1341,73 @@ impl App {
                 let (pane, query) = (*pane, input.lines().join(" "));
                 self.filter(pane, query);
             }
-            if let Some(Modal::Sessions { selection, .. }) = &mut self.modal {
+            if let Some(Modal::Sessions {
+                selection,
+                offset,
+                manual_scroll,
+                ..
+            }) = &mut self.modal
+            {
                 *selection = 0;
+                *offset = 0;
+                *manual_scroll = false;
             }
             return Ok(Effect::None);
         }
         if let Event::Mouse(mouse) = event {
+            if let Some(Modal::Sessions {
+                items,
+                input,
+                options,
+                offset,
+                manual_scroll,
+                area,
+                filter_areas,
+                control,
+                search,
+                selection,
+            }) = &mut self.modal
+            {
+                if mouse.kind == MouseEventKind::Down(MouseButton::Left)
+                    && let Some(index) = filter_areas
+                        .iter()
+                        .position(|r| r.contains((mouse.column, mouse.row).into()))
+                {
+                    *control = index;
+                    *search = false;
+                    return self.handle_modal(KeyEvent::new(K::Right, M::NONE));
+                }
+                if area.contains((mouse.column, mouse.row).into()) {
+                    let query = input.lines().join(" ").to_lowercase();
+                    let len = 2 + items
+                        .iter()
+                        .filter(|s| s.matches(!options.all, &query))
+                        .count();
+                    match mouse.kind {
+                        MouseEventKind::ScrollDown | MouseEventKind::ScrollUp => {
+                            let delta = if mouse.kind == MouseEventKind::ScrollDown {
+                                3
+                            } else {
+                                -3
+                            };
+                            *offset = offset
+                                .saturating_add_signed(delta)
+                                .min(len.saturating_sub(area.height as usize));
+                            *manual_scroll = true;
+                        }
+                        MouseEventKind::Down(MouseButton::Left) => {
+                            let index = *offset + usize::from(mouse.row - area.y);
+                            if index < len {
+                                *selection = index;
+                                *search = false;
+                                *manual_scroll = true;
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+                return Ok(Effect::None);
+            }
             if self.editor.is_some() || self.modal.is_some() {
                 return Ok(Effect::None);
             }
@@ -1857,6 +1926,10 @@ impl App {
                 }
             }
             Modal::Sessions {
+                offset,
+                manual_scroll,
+                area: _,
+                filter_areas: _,
                 items,
                 input,
                 selection,
@@ -1892,6 +1965,8 @@ impl App {
                         }
                     }
                     *selection = 0;
+                    *offset = 0;
+                    *manual_scroll = false;
                 }
                 let query = input.lines().join(" ").to_lowercase();
                 let filtered: Vec<_> = items
@@ -1948,12 +2023,18 @@ impl App {
                 } else if *search {
                     input.input(key);
                     *selection = 0;
+                    *offset = 0;
+                    *manual_scroll = false;
                 } else {
                     match key.code {
                         K::Down | K::Char('j') => {
+                            *manual_scroll = false;
                             *selection = (*selection + 1).min(filtered.len() + 1)
                         }
-                        K::Up | K::Char('k') => *selection = selection.saturating_sub(1),
+                        K::Up | K::Char('k') => {
+                            *manual_scroll = false;
+                            *selection = selection.saturating_sub(1);
+                        }
                         K::Char('/') => *search = true,
                         _ => {}
                     }

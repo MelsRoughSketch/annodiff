@@ -1037,6 +1037,10 @@ fn quit_from_session_picker_and_preview_but_type_q_in_search() {
     let dir = tempfile::tempdir().unwrap();
     let mut app = App::new(Review::default(), dir.path().join("state.json"));
     app.modal = Some(Modal::Sessions {
+        offset: 0,
+        manual_scroll: false,
+        area: Default::default(),
+        filter_areas: Default::default(),
         items: vec![],
         input: Default::default(),
         selection: 0,
@@ -1103,6 +1107,10 @@ fn session_directory_scope_combines_with_search_and_selects_visible_session() {
         dir.path().join("state.json"),
     );
     app.modal = Some(Modal::Sessions {
+        offset: 0,
+        manual_scroll: false,
+        area: Default::default(),
+        filter_areas: Default::default(),
         items: vec![
             here,
             Session {
@@ -1180,6 +1188,10 @@ fn session_directory_scope_combines_with_search_and_selects_visible_session() {
     );
     app.close_modal();
     app.modal = Some(Modal::Sessions {
+        offset: 0,
+        manual_scroll: false,
+        area: Default::default(),
+        filter_areas: Default::default(),
         items,
         input: ratatui_textarea::TextArea::new(vec!["fix".into()]),
         selection: 0,
@@ -2791,6 +2803,10 @@ fn session_picker_sort_and_archived_reload_preserve_filters() {
     assert_eq!(items[0].id, "remote"); // All does not prioritize local sessions.
     let mut app = App::new(Review::default(), dir.path().join("state.json"));
     app.modal = Some(Modal::Sessions {
+        offset: 0,
+        manual_scroll: false,
+        area: Default::default(),
+        filter_areas: Default::default(),
         items,
         input: ratatui_textarea::TextArea::new(vec!["find".into()]),
         selection: 3,
@@ -2878,4 +2894,146 @@ fn session_picker_sort_and_archived_reload_preserve_filters() {
     assert!(
         matches!(&app.modal, Some(Modal::Preview { id, archived: true, destination, .. }) if id == "archived" && destination.contains("restored when you confirm sending"))
     );
+}
+
+#[test]
+fn session_picker_scroll_margin_and_wheel_preserve_selection() {
+    use annodiff::agent::Session;
+    use crossterm::event::{MouseEvent, MouseEventKind};
+    let dir = tempfile::tempdir().unwrap();
+    let mut app = App::new(Review::default(), dir.path().join("state.json"));
+    app.modal = Some(Modal::Sessions {
+        items: (0..50)
+            .map(|i| Session {
+                id: i.to_string(),
+                preview: format!("Session {i}"),
+                current: true,
+                ..Default::default()
+            })
+            .collect(),
+        input: Default::default(),
+        selection: 0,
+        search: false,
+        options: Default::default(),
+        control: 0,
+        offset: 0,
+        manual_scroll: false,
+        area: Default::default(),
+        filter_areas: Default::default(),
+    });
+    let mut terminal = Terminal::new(TestBackend::new(120, 30)).unwrap();
+    let viewport = |app: &App| match &app.modal {
+        Some(Modal::Sessions {
+            selection,
+            offset,
+            manual_scroll,
+            area,
+            ..
+        }) => (*selection, *offset, *manual_scroll, *area),
+        _ => panic!(),
+    };
+    draw(&mut app, &mut terminal);
+    for _ in 0..25 {
+        press(&mut app, K::Down);
+        draw(&mut app, &mut terminal);
+    }
+    let (selection, offset, _, area) = viewport(&app);
+    assert_eq!(selection, 25);
+    assert_eq!(selection - offset, area.height as usize - 4);
+    for _ in 0..18 {
+        press(&mut app, K::Up);
+        draw(&mut app, &mut terminal);
+    }
+    assert_eq!(viewport(&app).0 - viewport(&app).1, 3);
+    let before = viewport(&app);
+    draw(&mut app, &mut terminal);
+    assert_eq!(viewport(&app), before);
+    let wheel = |kind, row| {
+        Event::Mouse(MouseEvent {
+            kind,
+            column: area.x,
+            row,
+            modifiers: M::NONE,
+        })
+    };
+    app.handle(wheel(MouseEventKind::ScrollDown, area.y - 1))
+        .unwrap();
+    assert_eq!(viewport(&app), before); // Search/header wheel must not reach underlying panes.
+    app.handle(wheel(MouseEventKind::ScrollDown, area.y))
+        .unwrap();
+    draw(&mut app, &mut terminal);
+    assert_eq!(viewport(&app).0, before.0);
+    assert_eq!(viewport(&app).1, before.1 + 3);
+    assert!(viewport(&app).2);
+    app.handle(wheel(MouseEventKind::ScrollUp, area.y)).unwrap();
+    draw(&mut app, &mut terminal);
+    assert_eq!(viewport(&app).1, before.1);
+    for _ in 0..50 {
+        app.handle(wheel(MouseEventKind::ScrollDown, area.y))
+            .unwrap();
+    }
+    draw(&mut app, &mut terminal);
+    assert_eq!(viewport(&app).1, 52 - area.height as usize);
+    assert_eq!(viewport(&app).0, before.0);
+    assert_eq!(app.offset, 0);
+    assert_eq!(app.list_offsets, [0; 4]);
+    // Clicking a scrolled row selects that visible session without moving the viewport.
+    let offset = viewport(&app).1;
+    app.handle(Event::Mouse(MouseEvent {
+        kind: MouseEventKind::Down(crossterm::event::MouseButton::Left),
+        column: area.x,
+        row: area.y + 2,
+        modifiers: M::NONE,
+    }))
+    .unwrap();
+    draw(&mut app, &mut terminal);
+    assert_eq!(viewport(&app).0, offset + 2);
+    assert_eq!(viewport(&app).1, offset);
+    // Scroll away, then keyboard movement follows the selected session again.
+    for _ in 0..50 {
+        app.handle(wheel(MouseEventKind::ScrollUp, area.y)).unwrap();
+    }
+    let clicked = viewport(&app).0;
+    press(&mut app, K::Down);
+    draw(&mut app, &mut terminal);
+    assert_eq!(viewport(&app).0, clicked + 1);
+    assert_eq!(
+        viewport(&app).0 - viewport(&app).1,
+        area.height as usize - 4
+    );
+    assert!(!viewport(&app).2);
+    press(&mut app, K::Char('/'));
+    app.handle(Event::Paste("Session 49".into())).unwrap();
+    draw(&mut app, &mut terminal);
+    assert_eq!((viewport(&app).0, viewport(&app).1), (0, 0));
+    app.handle(wheel(MouseEventKind::ScrollDown, area.y))
+        .unwrap();
+    draw(&mut app, &mut terminal);
+    assert_eq!(viewport(&app).1, 0);
+    // Sort clicks also leave search mode and preserve the query.
+    let Some(Modal::Sessions { filter_areas, .. }) = &app.modal else {
+        panic!()
+    };
+    let sort = filter_areas[2];
+    app.handle(Event::Mouse(MouseEvent {
+        kind: MouseEventKind::Down(crossterm::event::MouseButton::Left),
+        column: sort.x,
+        row: sort.y,
+        modifiers: M::NONE,
+    }))
+    .unwrap();
+    assert!(
+        matches!(&app.modal, Some(Modal::Sessions { options, control: 2, search: false, input, .. })
+        if options.created && input.lines() == ["Session 49"])
+    );
+    terminal
+        .resize(ratatui::layout::Rect::new(0, 0, 120, 8))
+        .unwrap();
+    press(&mut app, K::Down);
+    press(&mut app, K::Down);
+    draw(&mut app, &mut terminal);
+    let (selection, offset, _, area) = viewport(&app);
+    assert!(selection >= offset && selection < offset + area.height as usize);
+    press(&mut app, K::Enter);
+    assert!(matches!(&app.modal, Some(Modal::Preview { id, .. }) if id == "49"));
 }

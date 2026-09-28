@@ -923,8 +923,12 @@ fn draw_modal(
         }
         Modal::Sessions { .. } | Modal::Loading { .. } => {
             let mut loading_selection = 0;
-            let (items, input, selection, search, options, control, loading) = match modal {
+            let (items, input, selection, search, options, control, viewport) = match modal {
                 Modal::Sessions {
+                    offset,
+                    manual_scroll,
+                    area,
+                    filter_areas,
                     items,
                     input,
                     selection,
@@ -938,7 +942,7 @@ fn draw_modal(
                     *search,
                     options,
                     control,
-                    false,
+                    Some((offset, manual_scroll, area, filter_areas)),
                 ),
                 Modal::Loading {
                     input,
@@ -952,10 +956,11 @@ fn draw_modal(
                     false,
                     options,
                     control,
-                    true,
+                    None,
                 ),
                 _ => unreachable!(),
             };
+            let loading = viewport.is_none();
             frame.render_widget(Clear, area);
             let query = input.lines().join(" ").to_lowercase();
             let mut labels = vec![
@@ -1003,10 +1008,23 @@ fn draw_modal(
                 },
             ];
             let mut title = vec![Span::raw(" Destination · ")];
+            let mut filter_areas = [Rect::default(); 3];
+            let mut x = list_area
+                .x
+                .saturating_add(1 + " Destination · ".width() as u16);
             for (i, label) in filters.iter().enumerate() {
                 let focused = !search && *control == i;
+                let label = format!("{}{}", if focused { ">" } else { "" }, label);
+                let width = label.width() as u16;
+                filter_areas[i] = Rect::new(
+                    x,
+                    list_area.y,
+                    width.min(list_area.right().saturating_sub(1).saturating_sub(x)),
+                    1.min(list_area.height),
+                );
+                x = x.saturating_add(width + " · ".width() as u16);
                 title.push(Span::styled(
-                    format!("{}{}", if focused { ">" } else { "" }, label),
+                    label,
                     if focused {
                         selected()
                     } else {
@@ -1025,13 +1043,24 @@ fn draw_modal(
             frame.render_widget(border, list_area);
             if loading {
                 text(frame, inner, "Loading sessions…", 0, true);
-            } else {
+            } else if let Some((offset, manual_scroll, list_area, areas)) = viewport {
+                *list_area = inner;
+                *areas = filter_areas;
+                let height = inner.height as usize;
+                if !*manual_scroll && height > 0 {
+                    let margin = 3.min(height.saturating_sub(1) / 2);
+                    if *selection < offset.saturating_add(margin) {
+                        *offset = selection.saturating_sub(margin);
+                    } else if *selection >= offset.saturating_add(height - margin) {
+                        *offset = (selection.saturating_add(margin + 1)).saturating_sub(height);
+                    }
+                }
                 list(
                     frame,
                     inner,
                     &labels,
-                    (*selection, true),
-                    &mut 0,
+                    (*selection, false),
+                    offset,
                     !search,
                     false,
                 );
