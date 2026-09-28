@@ -1039,20 +1039,19 @@ fn draw_modal(
                 content.width - left.width,
                 content.height,
             );
-            let refs: Vec<_> = review
-                .files
-                .iter()
-                .flat_map(|f| {
-                    f.comments
-                        .iter()
-                        .filter(|c| c.pending())
-                        .map(move |c| (f, c))
-                })
-                .collect();
+            let refs: Vec<_> = review.pending_comments().collect();
             let labels: Vec<_> = refs
                 .iter()
                 .enumerate()
-                .map(|(i, (f, c))| format!("{}. {} · {}", i + 1, f.path, c.location(&f.lines)))
+                .map(|(i, (history, f, c))| {
+                    format!(
+                        "{}. {}{} · {}",
+                        i + 1,
+                        if *history { "[history] " } else { "" },
+                        f.path,
+                        c.location(&f.lines)
+                    )
+                })
                 .collect();
             let inner = bordered(frame, left, " Comments to send ".into(), *pane == 0);
             list(
@@ -1064,7 +1063,7 @@ fn draw_modal(
                 *pane == 0,
                 false,
             );
-            if let Some((file, comment)) = refs.get(*selection) {
+            if let Some((history, file, comment)) = refs.get(*selection) {
                 let body = Rect::new(right.x, right.y, right.width, right.height / 3);
                 let code = Rect::new(
                     right.x,
@@ -1072,14 +1071,25 @@ fn draw_modal(
                     right.width,
                     right.height - body.height,
                 );
-                let inner = bordered(frame, body, " Comment ".into(), *pane == 1);
+                let inner = bordered(
+                    frame,
+                    body,
+                    if *history {
+                        " Historical comment "
+                    } else {
+                        " Comment "
+                    }
+                    .into(),
+                    *pane == 1,
+                );
                 text(
                     frame,
                     inner,
                     &format!(
-                        "{}\nLines: {}\n\n{}",
+                        "{}\nLines: {}{}\n\n{}",
                         file.path,
                         comment.location(&file.lines),
+                        if *history { " (historical)" } else { "" },
                         comment.text
                     ),
                     offsets[0],
@@ -1150,6 +1160,7 @@ c: add a file comment (whole file)   Enter: focus Diff for the selected file   e
 Comments
 /: filter comments by text or file path   n/N: jump to next/previous search match   Esc: clear the current search/filter
 u: show Open / all comments (shared with Files)   o: show comments for current file / all files   Enter: edit the selected comment; inspect history comments   v: inspect recorded comment and code
+p: include/exclude an unsent Open history comment in the next send
 x: toggle selected comment Done / Open   X: mark all comments matching filters Done   d: delete the selected comment
 
 Commits
@@ -1185,7 +1196,7 @@ fn help_lines(app: &App) -> Vec<Line<'static>> {
         2 => {
             if let Some(r) = app.selected_ref() {
                 hints.push(if r.history {
-                    "Enter: inspect the recorded comment and code"
+                    "Enter: inspect history · p: include/exclude unsent Open comment in next send"
                 } else {
                     "Enter: edit the selected comment"
                 });

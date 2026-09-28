@@ -595,7 +595,7 @@ impl App {
                         ),
                         Span::raw("/"),
                         Span::styled(
-                            if c.sent { "Sent" } else { "Unsent" },
+                            c.delivery_status(history),
                             Style::default().fg(if c.sent { Color::Cyan } else { Color::LightRed }),
                         ),
                         Span::raw(format!(
@@ -848,7 +848,7 @@ impl App {
         let mut recorded = format!(
             "[{}/{}]\n{}\n{}\n--------------------\n{}",
             if c.done { "Done" } else { "Open" },
-            if c.sent { "Sent" } else { "Unsent" },
+            c.delivery_status(r.history),
             Path::new(&self.review.root).join(&f.path).display(),
             c.location(&f.lines),
             c.text
@@ -1175,20 +1175,20 @@ impl App {
         }
     }
     pub fn pending_refs(&self) -> Vec<CommentRef> {
-        self.review
-            .files
-            .iter()
-            .enumerate()
-            .flat_map(|(file, f)| {
-                f.comments
-                    .iter()
-                    .enumerate()
-                    .filter(|(_, c)| c.pending())
-                    .map(move |(comment, _)| CommentRef {
-                        file,
-                        comment,
-                        history: false,
-                    })
+        [(false, &self.review.files), (true, &self.review.history)]
+            .into_iter()
+            .flat_map(|(history, files)| {
+                files.iter().enumerate().flat_map(move |(file, f)| {
+                    f.comments
+                        .iter()
+                        .enumerate()
+                        .filter(move |(_, c)| c.sendable(history))
+                        .map(move |(comment, _)| CommentRef {
+                            file,
+                            comment,
+                            history,
+                        })
+                })
             })
             .collect()
     }
@@ -1616,6 +1616,19 @@ impl App {
                 self.file_only = !self.file_only;
                 self.rebuild_comments();
                 self.preview_comment();
+            }
+            K::Char('p') if self.pane == 2 => {
+                if let Some(r) = self.selected_ref().filter(|r| r.history) {
+                    ensure!(
+                        self.comment(r).1.pending(),
+                        "only unsent Open history comments can be included"
+                    );
+                    let mut next = self.review.clone();
+                    let c = &mut next.history[r.file].comments[r.comment];
+                    c.send_from_history = !c.send_from_history;
+                    self.apply(next)?;
+                    self.preview_comment();
+                }
             }
             K::Char('X') if self.pane == 2 => {
                 let mut next = self.review.clone();
