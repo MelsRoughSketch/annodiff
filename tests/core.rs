@@ -1837,7 +1837,7 @@ fn stacked_layout_focus_zoom_resize_and_state() {
         draw(&mut app, &mut terminal);
         assert_eq!(
             app.pane_rects[app.pane].height,
-            if pane == '0' { 75 } else { 35 }
+            if pane == '0' { 65 } else { 35 }
         );
         press(&mut app, K::Char('{'));
         press(&mut app, K::Char('+'));
@@ -1915,7 +1915,7 @@ fn stacked_layout_focus_zoom_resize_and_state() {
 }
 
 #[test]
-fn pane_width_keys_follow_focus_and_preserve_zoom_and_selection() {
+fn pane_width_keys_preserve_direction_across_focus_zoom_and_selection() {
     let dir = tempfile::tempdir().unwrap();
     for split in [false, true] {
         let mut app = App::new(
@@ -1939,13 +1939,7 @@ fn pane_width_keys_follow_focus_and_preserve_zoom_and_selection() {
                 app.zoom = zoom;
                 press(&mut app, K::Char('}'));
                 draw(&mut app, &mut terminal);
-                let percent = if zoom == 2 {
-                    30
-                } else if pane == 0 {
-                    25
-                } else {
-                    35
-                };
+                let percent = if zoom == 2 { 30 } else { 35 };
                 assert_eq!(app.sidebar_percent, percent);
                 assert_eq!((app.pane, app.zoom, app.bias), (pane, zoom, 0));
                 assert_eq!(app.bounds(), selection);
@@ -1960,12 +1954,23 @@ fn pane_width_keys_follow_focus_and_preserve_zoom_and_selection() {
                     }
                 );
                 press(&mut app, K::Char('{'));
+                draw(&mut app, &mut terminal);
                 assert_eq!(app.sidebar_percent, 30);
+                assert_eq!(
+                    app.pane_rects[pane].width,
+                    if zoom == 2 {
+                        100
+                    } else if pane == 0 {
+                        70
+                    } else {
+                        30
+                    }
+                );
             }
         }
         app.zoom = 0;
         app.focus(0);
-        for (key, expected) in [('}', 10), ('{', 90)] {
+        for (key, expected) in [('}', 90), ('{', 10)] {
             for _ in 0..30 {
                 press(&mut app, K::Char(key));
             }
@@ -1977,13 +1982,13 @@ fn pane_width_keys_follow_focus_and_preserve_zoom_and_selection() {
         press(&mut app, K::Char('{'));
         press(&mut app, K::Char('}'));
         assert_eq!(app.queries[0], "{}");
-        assert_eq!(app.sidebar_percent, 90);
+        assert_eq!(app.sidebar_percent, 10);
         press(&mut app, K::Esc);
         app.start_edit(None, false).unwrap();
         press(&mut app, K::Char('{'));
         press(&mut app, K::Char('}'));
         assert_eq!(app.editor.as_ref().unwrap().input.lines().join(""), "{}");
-        assert_eq!(app.sidebar_percent, 90);
+        assert_eq!(app.sidebar_percent, 10);
     }
 }
 
@@ -2075,7 +2080,7 @@ fn pane_border_drag_resizes_without_changing_focus_or_selection() {
     assert_eq!(app.pane_rects[0].width, 180);
     app.handle(mouse(MouseEventKind::Down(MouseButton::Left), 20))
         .unwrap();
-    press(&mut app, K::Char('{'));
+    press(&mut app, K::Char('}'));
     app.handle(mouse(MouseEventKind::Up(MouseButton::Left), 199))
         .unwrap();
     assert_eq!(app.sidebar_percent, 15);

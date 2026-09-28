@@ -1235,7 +1235,7 @@ h/l or ←→: focus previous/next pane or diff side
 Tab: move focus to the next pane
 t: switch side-by-side / stacked layout (stacked: 1/2/3 select top pane, 0 focuses Diff below)
 +/-: expand/shrink pane (Diff or stacked: normal / full; others: normal / tall / full)
-{/}: shrink/grow focused pane side by 5% (width in side-by-side, height in stacked); drag the sidebar/Diff border to resize
+{/}: grow/shrink pane 0 by 5% (shrink/grow panes 1–3; width in side-by-side, height in stacked); drag the sidebar/Diff border to resize
 Ctrl+Enter/F2: preview and send unsent Open comments
 r: reload diff and file/commit lists   R: choose Archive or Reset all comments   q: quit the app
 
