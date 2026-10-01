@@ -744,7 +744,7 @@ fn background(
     bounds: Option<(usize, usize)>,
 ) -> Style {
     let l = &f.lines[index];
-    let mut style = Style::default().fg(Color::White);
+    let mut style = Style::default().fg(Color::Rgb(255, 255, 255));
     if l.old > 0 && l.new == 0 {
         style = style.bg(Color::Rgb(55, 25, 30));
     }

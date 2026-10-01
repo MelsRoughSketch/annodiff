@@ -648,11 +648,15 @@ impl FileView {
                         let end = offset.min(self.code[i].text.len());
                         (start < end).then_some(Token {
                             range: start..end,
-                            style: Style::default().fg(Color::Rgb(
-                                s.foreground.r,
-                                s.foreground.g,
-                                s.foreground.b,
-                            )),
+                            style: Style::default().fg(
+                                if Some(s.foreground)
+                                    == THEMES.themes["base16-ocean.dark"].settings.foreground
+                                {
+                                    Color::Rgb(255, 255, 255)
+                                } else {
+                                    Color::Rgb(s.foreground.r, s.foreground.g, s.foreground.b)
+                                },
+                            ),
                         })
                     })
                     .collect();

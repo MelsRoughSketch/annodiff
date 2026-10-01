@@ -1063,6 +1063,44 @@ fn graph_preserves_lanes() {
 }
 
 #[test]
+fn diff_default_text_is_rgb_white_without_changing_backgrounds_or_syntax_colors() {
+    use ratatui::style::Color;
+
+    for path in ["sample.txt", "sample.rs"] {
+        for split in [false, true] {
+            let mut f =
+                file("@@ -1,3 +1,3 @@\n fn main() {\n-    let old = 1;\n+    let new = 2;\n }\n");
+            f.path = path.into();
+            let dir = tempfile::tempdir().unwrap();
+            let mut app = App::new(
+                Review {
+                    files: vec![f],
+                    split,
+                    ..Default::default()
+                },
+                dir.path().join("state.json"),
+            );
+            let mut terminal = Terminal::new(TestBackend::new(120, 30)).unwrap();
+            draw(&mut app, &mut terminal);
+            while app.highlight_pending {
+                draw(&mut app, &mut terminal);
+            }
+            let cells = &terminal.backend().buffer().content;
+            for background in [Color::Rgb(55, 25, 30), Color::Rgb(20, 45, 30)] {
+                let index = cells
+                    .iter()
+                    .position(|cell| cell.symbol() == "=" && cell.bg == background)
+                    .expect("added/deleted code retains its background");
+                assert_eq!(cells[index].fg, Color::Rgb(255, 255, 255));
+                if path == "sample.rs" {
+                    assert_ne!(cells[index + 2].fg, Color::Rgb(255, 255, 255));
+                }
+            }
+        }
+    }
+}
+
+#[test]
 fn highlighting_stops_at_viewport_and_resumes_multiline_context() {
     let patch = format!(
         "@@ -0,0 +1,1000 @@\n+/* open comment\n{}+end */\n+var answer = 42\n",
