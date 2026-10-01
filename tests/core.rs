@@ -3676,6 +3676,113 @@ fn send_preview_preserves_scroll_offset_and_cursor_margin() {
 }
 
 #[test]
+fn file_tree_compacts_single_directory_chains_and_preserves_folds() {
+    use annodiff::app::FileRow::{Directory, File as Leaf};
+    let dir = tempfile::tempdir().unwrap();
+    let mut files: Vec<_> = [
+        "aaa/bbb/ccc/target.rs",
+        "branch/left/deep/a.rs",
+        "branch/right/deep/b.rs",
+        "direct/child/deep/c.rs",
+        "direct/file.rs",
+        "日本語/中間/奥/例.rs",
+    ]
+    .into_iter()
+    .map(|path| File {
+        path: path.into(),
+        ..fixture()
+    })
+    .collect();
+    files[0].comments.push(Comment {
+        file: true,
+        text: "note".into(),
+        ..Default::default()
+    });
+    let mut app = App::new(
+        Review {
+            files,
+            ..Default::default()
+        },
+        dir.path().join("state.json"),
+    );
+    let expanded = vec![
+        Directory("aaa/bbb/ccc".into()),
+        Leaf(0),
+        Directory("branch".into()),
+        Directory("branch/left/deep".into()),
+        Leaf(1),
+        Directory("branch/right/deep".into()),
+        Leaf(2),
+        Directory("direct".into()),
+        Directory("direct/child/deep".into()),
+        Leaf(3),
+        Leaf(4),
+        Directory("日本語/中間/奥".into()),
+        Leaf(5),
+    ];
+    assert_eq!(app.tree_rows, expanded);
+    assert_eq!(app.labels[1][0].to_string(), "▼ aaa/bbb/ccc/");
+    assert!(app.labels[1][1].to_string().starts_with("     target.rs"));
+    assert_eq!(app.labels[1][3].to_string(), "  ▼ left/deep/");
+    assert_eq!(app.labels[1][8].to_string(), "  ▼ child/deep/");
+    assert_eq!(app.labels[1][11].to_string(), "▼ 日本語/中間/奥/");
+
+    app.move_selection(0, Some(0));
+    press(&mut app, K::Enter);
+    assert_eq!(
+        app.tree_rows[app.cursor[1]],
+        Directory("aaa/bbb/ccc".into())
+    );
+    assert_eq!(app.labels[1][0].to_string(), "▶ aaa/bbb/ccc/");
+    assert!(!app.tree_rows.contains(&Leaf(0)));
+    app.filter(1, "TARGET".into());
+    assert_eq!(app.tree_rows, [Directory("aaa/bbb/ccc".into()), Leaf(0)]);
+    app.filter(1, String::new());
+    assert!(!app.tree_rows.contains(&Leaf(0)));
+    press(&mut app, K::Char('o'));
+    assert_eq!(app.tree_rows, [Directory("aaa/bbb/ccc".into()), Leaf(0)]);
+    press(&mut app, K::Char('o'));
+    assert!(!app.tree_rows.contains(&Leaf(0)));
+    press(&mut app, K::Enter);
+    assert_eq!(app.tree_rows, expanded);
+
+    // A new direct child splits the chain; removing it compacts the folded parent.
+    let mut next = app.review.clone();
+    next.files.push(File {
+        path: "aaa/bbb/other.rs".into(),
+        ..fixture()
+    });
+    app.apply(next).unwrap();
+    assert_eq!(app.tree_rows[0], Directory("aaa/bbb".into()));
+    assert_eq!(app.labels[1][1].to_string(), "  ▼ ccc/");
+    app.move_selection(0, Some(0));
+    press(&mut app, K::Enter);
+    let mut next = app.review.clone();
+    next.files.pop();
+    app.apply(next).unwrap();
+    assert_eq!(
+        app.tree_rows[app.cursor[1]],
+        Directory("aaa/bbb/ccc".into())
+    );
+    assert_eq!(app.labels[1][0].to_string(), "▶ aaa/bbb/ccc/");
+    press(&mut app, K::Enter);
+    assert_eq!(app.tree_rows, expanded);
+
+    // Replacing a file with a directory still leaves a changed file in its parent.
+    let mut next = app.review.clone();
+    next.files.push(File {
+        path: "aaa/bbb".into(),
+        ..fixture()
+    });
+    next.statuses.insert("aaa/bbb".into(), "D".into());
+    app.apply(next).unwrap();
+    assert_eq!(app.tree_rows[0], Directory("aaa".into()));
+    assert_eq!(app.tree_rows[1], Leaf(6));
+    assert_eq!(app.tree_rows[2], Directory("aaa/bbb/ccc".into()));
+    assert_eq!(app.labels[1][2].to_string(), "  ▼ bbb/ccc/");
+}
+
+#[test]
 fn file_tree_navigation_filters_mouse_and_layout() {
     use annodiff::app::FileRow::{Directory, File as Leaf};
     use crossterm::event::{MouseButton, MouseEvent, MouseEventKind};

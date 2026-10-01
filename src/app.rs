@@ -566,6 +566,34 @@ impl App {
             self.file_rows.push(i);
         }
         let filtered = !self.queries[1].is_empty() || self.commented_files_only;
+        // Use the full diff tree so filtering does not change its branching points.
+        let mut single_dirs = HashMap::<&str, Option<&str>>::new();
+        for f in &self.review.files {
+            let mut child = f.path.as_str();
+            while let Some((parent, _)) = child.rsplit_once('/') {
+                let directory = (child != f.path.as_str()).then_some(child);
+                single_dirs
+                    .entry(parent)
+                    .and_modify(|only| {
+                        if *only != directory {
+                            *only = None;
+                        }
+                    })
+                    .or_insert(directory);
+                child = parent;
+            }
+        }
+        self.collapsed_dirs = self
+            .collapsed_dirs
+            .iter()
+            .map(|fold| {
+                let mut path = fold.as_str();
+                while let Some(child) = single_dirs.get(path).copied().flatten() {
+                    path = child;
+                }
+                path.to_owned()
+            })
+            .collect();
         let mut files = self.file_rows.clone();
         files.sort_by(|a, b| {
             self.review.files[*a]
@@ -578,8 +606,12 @@ impl App {
             let f = &self.review.files[i];
             let mut hidden = false;
             let mut depth = 0;
+            let mut start = 0;
             for (end, _) in f.path.match_indices('/') {
                 let path = &f.path[..end];
+                if single_dirs.get(path).is_some_and(Option::is_some) {
+                    continue;
+                }
                 if directories.insert(path.to_owned()) {
                     self.tree_rows.push(FileRow::Directory(path.to_owned()));
                     self.labels[1].push(Line::from(format!(
@@ -590,10 +622,11 @@ impl App {
                         } else {
                             "▼"
                         },
-                        path.rsplit('/').next().unwrap_or(path)
+                        &f.path[start..end]
                     )));
                 }
                 depth += 1;
+                start = end + 1;
                 if !filtered && self.collapsed_dirs.contains(path) {
                     hidden = true;
                     break;
@@ -652,7 +685,7 @@ impl App {
             self.offset = 0;
         }
         self.cursor[1] = directory
-            .and_then(|path| self.tree_rows.iter().position(|row| matches!(row, FileRow::Directory(dir) if *dir == path)))
+            .and_then(|path| self.tree_rows.iter().position(|row| matches!(row, FileRow::Directory(dir) if *dir == path || dir.strip_prefix(&path).is_some_and(|rest| rest.starts_with('/')))))
             .or_else(|| self.tree_rows.iter().position(|row| matches!(row, FileRow::File(i) if Some(*i) == self.file)))
             .or_else(|| {
                 let path = &self.review.files.get(self.file?)?.path;
