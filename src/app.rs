@@ -464,11 +464,8 @@ impl App {
         if let Some(view) = self.view_mut() {
             view.layout(width, bias, wrap);
         }
-        if let (Some((row, part)), Some(view)) = (anchor, self.view())
-            && row + 1 < view.starts.len()
-        {
-            self.cursor[0] =
-                view.starts[row] + part.min(view.starts[row + 1] - view.starts[row] - 1);
+        if let Some(visual) = anchor.and_then(|(row, part)| self.view()?.visual_at(row, part)) {
+            self.cursor[0] = visual;
         }
         if let Some(view) = self.view() {
             let cursor = self.cursor[0].min(view.len().saturating_sub(1));
@@ -488,16 +485,9 @@ impl App {
         // Selection and an in-progress drag must follow the same source rows as the cursor.
         [self.anchor, self.drag_start] = range_anchors.map(|anchor| {
             let ((row, part), side) = anchor?;
-            let view = self.view()?;
-            Some((
-                view.starts[row] + part.min(view.starts[row + 1] - view.starts[row] - 1),
-                side,
-            ))
+            Some((self.view()?.visual_at(row, part)?, side))
         });
-        let after = editor_anchor.and_then(|(row, part)| {
-            let v = self.view()?;
-            Some(v.starts[row] + part.min(v.starts[row + 1] - v.starts[row] - 1))
-        });
+        let after = editor_anchor.and_then(|(row, part)| self.view()?.visual_at(row, part));
         if let Some(editor) = &mut self.editor {
             editor.selection = self.cursor[0];
             if let Some(after) = after {

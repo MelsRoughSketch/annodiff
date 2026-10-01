@@ -9,6 +9,19 @@ PR that completes the work.
 Future design candidates are conditional; they are not a request to build new
 abstractions ahead of the related features.
 
+Initial stack (review each PR against its listed base):
+
+| Step | Branch | Base |
+| --- | --- | --- |
+| 1. Shared definitions | `refactor/shared-ui-git-rpc` | `main` |
+| 2. Lists and input | `refactor/lists-and-input` | `refactor/shared-ui-git-rpc` |
+| 3. Session picker | `refactor/session-picker` | `refactor/lists-and-input` |
+| 4. Diff coordinates | `refactor/diff-coordinates` | `refactor/session-picker` |
+
+If a preceding PR is squash-merged, rebase the next branch's own commits onto
+main before retargeting it; changing the base alone can include already reviewed
+commits in the next diff.
+
 ## 1. Shared definitions and duplicated protocol handling
 
 - [x] Centralize application-owned UI colors and the syntax theme name (#33).
@@ -28,9 +41,9 @@ branch until it is merged.
 ## 2. List construction and input handling
 
 - [x] Separate file-list construction from rebuilding all sidebar lists.
-  `App::rebuild_lists` currently also rebuilds comments and commits. Keep file
-  filtering, compact directory chains, folds, and selection restoration together.
-  Check callers before reducing which lists an operation rebuilds.
+  `App::rebuild_lists` remains the complete refresh entry point. File filters
+  rebuild files and comments; folds rebuild only the file tree. Keep compact
+  directory chains and selection restoration together in file-list construction.
 - [ ] Keep each list's display rows and source-item mapping together in its
   construction path. Preserve working-tree rows, filtered commit selection,
   history references, and file selection through filter/fold changes.
@@ -55,15 +68,15 @@ or claiming a loading-time fix.
 
 ## 4. Diff coordinates and related state
 
-- [ ] Centralize restoration of a visual position after wrapping/layout changes
-  in `FileView`; the cursor, selection anchors, drag anchor, and editor currently
-  repeat the same row/fragment conversion.
+- [x] Centralize restoration of a visual position after wrapping/layout changes
+  in `FileView`; the cursor, selection anchors, drag anchor, and editor now use
+  the same row/fragment conversion.
 - [ ] Share screen-to-diff hit testing with the layout used for drawing (#49, #51).
   Preserve unified/split views, scrolling, wrapping, comments, and editor layout.
 - [ ] Give omitted-context rows enough identity to target the clicked gap (#49),
   rather than relying only on nearest-gap expansion. Treat enabling the new
   interaction as a separate feature change.
-- [ ] Reuse the hunk-navigation row calculation across expanded and normal views
+- [x] Reuse the hunk-navigation row calculation across expanded and normal views
   where the mappings permit it; preserve original comment coordinates.
 - [ ] Group expanded context and its visibility/source mappings if this makes
   their invariants explicit. Keep `FileView`'s useful derived-data caches.

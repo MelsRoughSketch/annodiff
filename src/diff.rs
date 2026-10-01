@@ -117,6 +117,30 @@ pub struct FileView {
     pub hunk_rows: [Vec<usize>; 2],
 }
 
+fn hunk_navigation(
+    rows: &[Row],
+    file: &File,
+    hunks: &[usize],
+    source: impl Fn(usize) -> Option<usize>,
+) -> [Vec<usize>; 2] {
+    let mut starts: [Vec<usize>; 2] = Default::default();
+    let mut previous = [None, None];
+    for (row, item) in rows.iter().enumerate() {
+        if let Row::Code(pair) = item {
+            for side in 0..2 {
+                if let Some(i) = pair[side].and_then(&source) {
+                    let line = &file.lines[i];
+                    if (line.old > 0) != (line.new > 0) && previous[side] != Some(hunks[i]) {
+                        starts[side].push(row);
+                        previous[side] = Some(hunks[i]);
+                    }
+                }
+            }
+        }
+    }
+    starts
+}
+
 pub fn hidden(line: &Line) -> bool {
     line.old == 0
         && line.new == 0
@@ -263,21 +287,7 @@ impl FileView {
                 hunk
             })
             .collect();
-        self.hunk_rows = Default::default();
-        let mut previous = [None, None];
-        for (row, item) in self.rows.iter().enumerate() {
-            if let Row::Code(pair) = item {
-                for side in 0..2 {
-                    if let Some(source) = pair[side].and_then(|i| self.source_indices[i]) {
-                        let l = &file.lines[source];
-                        if (l.old > 0) != (l.new > 0) && previous[side] != Some(hunks[source]) {
-                            self.hunk_rows[side].push(row);
-                            previous[side] = Some(hunks[source]);
-                        }
-                    }
-                }
-            }
-        }
+        self.hunk_rows = hunk_navigation(&self.rows, file, &hunks, |i| self.source_indices[i]);
         self.expanded = Some(expanded);
     }
     pub fn expand(file: &File, expanded: File, split: bool) -> Result<Self> {
@@ -470,22 +480,7 @@ impl FileView {
             }
         }
         self.starts.clear();
-        self.hunk_rows = Default::default();
-        let mut previous = [None, None];
-        for (row, item) in self.rows.iter().enumerate() {
-            if let Row::Code(pair) = item {
-                for side in 0..2 {
-                    if let Some(i) = pair[side] {
-                        let l = &file.lines[i];
-                        if (l.old > 0) != (l.new > 0) && previous[side] != Some(self.line_hunks[i])
-                        {
-                            self.hunk_rows[side].push(row);
-                            previous[side] = Some(self.line_hunks[i]);
-                        }
-                    }
-                }
-            }
-        }
+        self.hunk_rows = hunk_navigation(&self.rows, file, &self.line_hunks, Some);
     }
     pub fn code_widths(&self, width: usize, bias: i32) -> [usize; 2] {
         if self.split {
@@ -560,6 +555,11 @@ impl FileView {
         let row = self.starts.partition_point(|n| *n <= visual) - 1;
         Some((row, visual - self.starts[row]))
     }
+    pub fn visual_at(&self, row: usize, part: usize) -> Option<usize> {
+        let [start, end] = self.starts.get(row..)?.first_chunk::<2>()?;
+        let last = end.checked_sub(*start)?.checked_sub(1)?;
+        Some(*start + part.min(last))
+    }
     pub fn visual_for_source(&self, source: usize, side: usize) -> Option<usize> {
         let source = if self.expanded.is_some() {
             *self.display_indices.get(source)?.as_ref()?
@@ -572,7 +572,7 @@ impl FileView {
         self.rows
             .iter()
             .position(|row| matches!(row, Row::Code(pair) if pair[side] == Some(source)))
-            .map(|row| self.starts[row])
+            .and_then(|row| self.visual_at(row, 0))
     }
     pub fn source(&self, visual: usize, side: usize) -> Option<usize> {
         self.original_source(self.display_source(visual, side)?)
