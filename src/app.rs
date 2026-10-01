@@ -6,7 +6,8 @@ use crate::{
 };
 use anyhow::{Context, Result, ensure};
 use crossterm::event::{
-    Event, KeyCode as K, KeyEvent, KeyEventKind, KeyModifiers as M, MouseButton, MouseEventKind,
+    Event, KeyCode as K, KeyEvent, KeyEventKind, KeyModifiers as M, MouseButton, MouseEvent,
+    MouseEventKind,
 };
 use ratatui::{
     Frame,
@@ -523,6 +524,11 @@ impl App {
         self.rebuild_comments();
     }
     pub fn rebuild_lists(&mut self) {
+        self.rebuild_files();
+        self.rebuild_comments();
+        self.rebuild_commits();
+    }
+    fn rebuild_files(&mut self) {
         let directory = match self.tree_rows.get(self.cursor[1]) {
             Some(FileRow::Directory(path))
                 if self.queries[1].is_empty() && !self.commented_files_only =>
@@ -690,8 +696,6 @@ impl App {
                 self.tree_rows.iter().rposition(|row| matches!(row, FileRow::Directory(dir) if path.strip_prefix(dir).is_some_and(|rest| rest.starts_with('/'))))
             })
             .unwrap_or(0);
-        self.rebuild_comments();
-        self.rebuild_commits();
     }
     fn set_directory_expanded(&mut self, expand: Option<bool>) -> bool {
         let Some(FileRow::Directory(path)) = self.tree_rows.get(self.cursor[1]) else {
@@ -710,7 +714,7 @@ impl App {
             self.collapsed_dirs.insert(path);
         }
         self.manual_scroll[1] = false;
-        self.rebuild_lists();
+        self.rebuild_files();
         true
     }
     pub fn rebuild_comments(&mut self) {
@@ -1106,7 +1110,8 @@ impl App {
             ensure!(!r.history, "historical comments are read-only");
             self.queries[1].clear();
             self.select_file(Some(r.file));
-            self.rebuild_lists();
+            self.rebuild_files();
+            self.rebuild_comments();
         }
         let f = self.current().context("no selected file")?;
         let comment = if let Some(r) = reference {
@@ -1223,7 +1228,8 @@ impl App {
         match pane {
             1 => {
                 let previous = self.file;
-                self.rebuild_lists();
+                self.rebuild_files();
+                self.rebuild_comments();
                 if self.file != previous {
                     self.cursor[0] = 0;
                     self.offset = 0;
@@ -1506,328 +1512,333 @@ impl App {
             self.pane_drag = None;
             self.diff_click = None;
         }
-        if let Event::Paste(text) = &event {
-            if let Some(editor) = &mut self.editor {
-                editor.input.insert_str(text);
-                return Ok(Effect::None);
-            }
-            if let Some(
-                Modal::Search { input, .. }
-                | Modal::Sessions { input, .. }
-                | Modal::Help {
-                    input,
-                    search: true,
-                    ..
-                },
-            ) = &mut self.modal
-            {
-                input.insert_str(text.replace(['\n', '\r'], " "));
-            }
-            if let Some(Modal::Search { pane, input, .. }) = &self.modal {
-                let (pane, query) = (*pane, input.lines().join(" "));
-                self.filter(pane, query);
-            }
-            if let Some(Modal::Sessions {
-                selection,
-                offset,
-                manual_scroll,
-                ..
-            }) = &mut self.modal
-            {
-                *selection = 0;
-                *offset = 0;
-                *manual_scroll = false;
-            }
-            return Ok(Effect::None);
+        match event {
+            Event::Paste(text) => self.handle_paste(&text),
+            Event::Mouse(mouse) => self.handle_mouse(mouse),
+            Event::Key(key) => self.handle_key(key),
+            _ => Ok(Effect::None),
         }
-        if let Event::Mouse(mouse) = event {
-            if let Some(Modal::Sessions {
-                items,
-                input,
-                options,
-                offset,
-                manual_scroll,
-                area,
-                filter_areas,
-                control,
-                search,
-                selection,
-            }) = &mut self.modal
-            {
-                if mouse.kind == MouseEventKind::Down(MouseButton::Left)
-                    && let Some(index) = filter_areas
-                        .iter()
-                        .flatten()
-                        .position(|r| r.contains((mouse.column, mouse.row).into()))
-                {
-                    *control = index / 2;
-                    *search = false;
-                    let current = [options.all, options.archived, options.created][*control];
-                    return if current == (index % 2 == 1) {
-                        Ok(Effect::None)
-                    } else {
-                        self.handle_modal(KeyEvent::new(K::Right, M::NONE))
-                    };
-                }
-                if area.contains((mouse.column, mouse.row).into()) {
-                    let query = input.lines().join(" ").to_lowercase();
-                    let len = 2 + items
-                        .iter()
-                        .filter(|s| s.matches(!options.all, &query))
-                        .count();
-                    match mouse.kind {
-                        MouseEventKind::ScrollDown | MouseEventKind::ScrollUp => {
-                            let delta = if mouse.kind == MouseEventKind::ScrollDown {
-                                3
-                            } else {
-                                -3
-                            };
-                            *offset = offset
-                                .saturating_add_signed(delta)
-                                .min(len.saturating_sub(area.height as usize));
-                            *manual_scroll = true;
-                        }
-                        MouseEventKind::Down(MouseButton::Left) => {
-                            let index = *offset + usize::from(mouse.row - area.y);
-                            if index < len {
-                                *selection = index;
-                                *search = false;
-                                return self.handle_modal(KeyEvent::new(K::Enter, M::NONE));
-                            }
-                        }
-                        _ => {}
-                    }
-                }
-                return Ok(Effect::None);
-            }
-            if self.editor.is_some() || self.modal.is_some() {
-                return Ok(Effect::None);
-            }
-            let position = if self.stacked {
-                mouse.row
-            } else {
-                mouse.column
-            };
-            let (origin, extent) = self.pane_axis();
-            if matches!(
-                mouse.kind,
-                MouseEventKind::Drag(MouseButton::Left) | MouseEventKind::Up(MouseButton::Left)
-            ) {
-                if mouse.kind == MouseEventKind::Drag(MouseButton::Left) {
-                    self.diff_click = None;
-                }
-                if let Some((start, percent)) = self.pane_drag {
-                    if self.zoom < 2 && !self.pane_area.is_empty() {
-                        let delta = i32::from(position) - i32::from(start);
-                        self.set_sidebar_percent(percent + delta * 100 / i32::from(extent));
-                    }
-                    if mouse.kind == MouseEventKind::Up(MouseButton::Left) {
-                        self.pane_drag = None;
-                    }
-                    return Ok(Effect::None);
-                }
-                if self.diff_inner.is_empty() {
-                    self.drag_start = None;
-                    self.divider_drag = None;
-                    return Ok(Effect::None);
-                }
-                if let Some((start_x, bias)) = self.divider_drag {
-                    if let Some(view) = self.view() {
-                        let available = (view.widths[0] + view.widths[1]).max(1) as i32;
-                        let delta = i32::from(mouse.column) - i32::from(start_x);
-                        self.set_diff_bias(bias + delta * 100 / available);
-                    }
-                    if mouse.kind == MouseEventKind::Up(MouseButton::Left) {
-                        self.divider_drag = None;
-                    }
-                    return Ok(Effect::None);
-                }
-                if let Some((start, side)) = self.drag_start {
-                    let y = mouse.row.clamp(
-                        self.diff_inner.y,
-                        self.diff_inner.bottom().saturating_sub(1),
-                    );
-                    let target = self.offset + y.saturating_sub(self.diff_inner.y) as usize;
-                    self.side = side;
-                    self.move_selection(if target < self.cursor[0] { -1 } else { 1 }, Some(target));
-                    if self.cursor[0] != start || self.anchor.is_some() {
-                        self.anchor = Some((start, side));
-                    }
-                }
-                if mouse.kind == MouseEventKind::Up(MouseButton::Left) {
-                    let click = self.diff_click.take();
-                    if self.drag_start.take().is_some() && self.anchor.is_some() {
-                        self.start_edit(None, false)?;
-                    } else if click == Some((self.cursor[0], self.side))
-                        && self.diff_inner.contains((mouse.column, mouse.row).into())
-                        && self.offset + usize::from(mouse.row - self.diff_inner.y)
-                            == self.cursor[0]
-                    {
-                        self.start_edit(self.selected_ref(), false)?;
-                    }
-                }
-                return Ok(Effect::None);
-            }
-            if mouse.kind == MouseEventKind::Down(MouseButton::Left) {
-                self.drag_start = None;
-                self.diff_click = None;
-                self.divider_drag = None;
-                self.pane_drag = None;
-                let sidebar_size = (i32::from(extent) * self.sidebar_percent / 100) as u16;
-                let boundary = origin + sidebar_size;
-                if self.zoom < 2
-                    && sidebar_size > 0
-                    && sidebar_size < extent
-                    && self.pane_area.contains((mouse.column, mouse.row).into())
-                    && (position == boundary || position == boundary - 1)
-                    && !self
-                        .diff_mode_rects
-                        .iter()
-                        .any(|r| r.contains((mouse.column, mouse.row).into()))
-                {
-                    self.pane_drag = Some((position, self.sidebar_percent));
-                    return Ok(Effect::None);
-                }
-                if self.split()
-                    && self.diff_inner.contains((mouse.column, mouse.row).into())
-                    && self.view().is_some_and(|v| {
-                        usize::from(mouse.column - self.diff_inner.x) == v.digits + v.widths[0] + 2
-                    })
-                {
-                    self.focus(0);
-                    self.divider_drag = Some((mouse.column, self.bias));
-                    return Ok(Effect::None);
-                }
-                for mode in 0..2 {
-                    if self.diff_mode_rects[mode].contains((mouse.column, mouse.row).into()) {
-                        self.set_split(mode == 1)?;
-                        self.focus(0);
-                        return Ok(Effect::None);
-                    }
-                }
-            }
-            for pane in 0..4 {
-                if self.pane_rects[pane].contains((mouse.column, mouse.row).into()) {
-                    match mouse.kind {
-                        MouseEventKind::ScrollDown | MouseEventKind::ScrollUp => {
-                            let delta = if mouse.kind == MouseEventKind::ScrollDown {
-                                3
-                            } else {
-                                -3
-                            };
-                            let height = self.pane_rects[pane].height.saturating_sub(2) as usize;
-                            let len = if pane == 0 {
-                                self.view().map_or(0, |v| v.len())
-                            } else {
-                                self.labels[pane].len()
-                            };
-                            let offset = if pane == 0 {
-                                &mut self.offset
-                            } else {
-                                &mut self.list_offsets[pane]
-                            };
-                            *offset = offset
-                                .saturating_add_signed(delta)
-                                .min(len.saturating_sub(height));
-                            self.manual_scroll[pane] = true;
-                        }
-                        MouseEventKind::Down(MouseButton::Left) => {
-                            let focused = self.pane == pane;
-                            self.focus(pane);
-                            if pane == 0 {
-                                if !self.diff_inner.contains((mouse.column, mouse.row).into()) {
-                                    return Ok(Effect::None);
-                                }
-                                let side = if self.split() {
-                                    usize::from(
-                                        mouse.column
-                                            >= self.diff_inner.x
-                                                + self.view().map_or(0, |v| {
-                                                    (v.digits + v.widths[0] + 3) as u16
-                                                }),
-                                    )
-                                } else {
-                                    0
-                                };
-                                let target = self.offset
-                                    + mouse.row.saturating_sub(self.diff_inner.y) as usize;
-                                if !self.view().is_some_and(|v| v.selectable(target, side)) {
-                                    return Ok(Effect::None);
-                                }
-                                let activate =
-                                    focused && self.side == side && self.cursor[0] == target;
-                                self.anchor = None;
-                                self.side = side;
-                                self.move_selection(1, Some(target));
-                                if self
-                                    .view()
-                                    .and_then(|v| v.source(self.cursor[0], side))
-                                    .is_some()
-                                {
-                                    self.drag_start = Some((self.cursor[0], side));
-                                }
-                                if activate
-                                    && (self.drag_start.is_some() || self.selected_ref().is_some())
-                                {
-                                    self.diff_click = Some((target, side));
-                                }
-                            } else {
-                                if !self.pane_rects[pane]
-                                    .inner(ratatui::layout::Margin::new(1, 1))
-                                    .contains((mouse.column, mouse.row).into())
-                                {
-                                    return Ok(Effect::None);
-                                }
-                                let index = self.list_offsets[pane]
-                                    + mouse.row.saturating_sub(self.pane_rects[pane].y + 1)
-                                        as usize;
-                                if index >= self.labels[pane].len() {
-                                    return Ok(Effect::None);
-                                }
-                                let activate = pane == 3 || focused && self.cursor[pane] == index;
-                                self.move_selection(1, Some(index));
-                                if activate {
-                                    let key = match pane {
-                                        1 if matches!(
-                                            self.tree_rows.get(index),
-                                            Some(FileRow::File(_))
-                                        ) =>
-                                        {
-                                            K::Char('c')
-                                        }
-                                        2 | 3 => K::Enter,
-                                        _ => return Ok(Effect::None),
-                                    };
-                                    return self.handle(Event::Key(KeyEvent::new(key, M::NONE)));
-                                }
-                            }
-                        }
-                        _ => {}
-                    }
-                    break;
-                }
-            }
-            return Ok(Effect::None);
-        }
-        let Event::Key(key) = event else {
-            return Ok(Effect::None);
-        };
-        if key.kind == KeyEventKind::Release {
-            return Ok(Effect::None);
-        }
+    }
+    fn clear_drag(&mut self) {
         self.drag_start = None;
         self.diff_click = None;
         self.divider_drag = None;
         self.pane_drag = None;
-        if self.editor.is_some() {
-            match key.code {
-                K::Esc => self.close_editor(),
-                _ if save_key(key) => self.save_editor()?,
-                _ => {
-                    self.editor.as_mut().unwrap().input.input(key);
+    }
+    fn handle_paste(&mut self, text: &str) -> Result<Effect> {
+        if let Some(editor) = &mut self.editor {
+            editor.input.insert_str(text);
+            return Ok(Effect::None);
+        }
+        if let Some(
+            Modal::Search { input, .. }
+            | Modal::Sessions { input, .. }
+            | Modal::Help {
+                input,
+                search: true,
+                ..
+            },
+        ) = &mut self.modal
+        {
+            input.insert_str(text.replace(['\n', '\r'], " "));
+        }
+        if let Some(Modal::Search { pane, input, .. }) = &self.modal {
+            let (pane, query) = (*pane, input.lines().join(" "));
+            self.filter(pane, query);
+        }
+        if let Some(Modal::Sessions {
+            selection,
+            offset,
+            manual_scroll,
+            ..
+        }) = &mut self.modal
+        {
+            *selection = 0;
+            *offset = 0;
+            *manual_scroll = false;
+        }
+        Ok(Effect::None)
+    }
+    fn handle_mouse(&mut self, mouse: MouseEvent) -> Result<Effect> {
+        if let Some(Modal::Sessions {
+            items,
+            input,
+            options,
+            offset,
+            manual_scroll,
+            area,
+            filter_areas,
+            control,
+            search,
+            selection,
+        }) = &mut self.modal
+        {
+            if mouse.kind == MouseEventKind::Down(MouseButton::Left)
+                && let Some(index) = filter_areas
+                    .iter()
+                    .flatten()
+                    .position(|r| r.contains((mouse.column, mouse.row).into()))
+            {
+                *control = index / 2;
+                *search = false;
+                let current = [options.all, options.archived, options.created][*control];
+                return if current == (index % 2 == 1) {
+                    Ok(Effect::None)
+                } else {
+                    self.handle_modal(KeyEvent::new(K::Right, M::NONE))
+                };
+            }
+            if area.contains((mouse.column, mouse.row).into()) {
+                let query = input.lines().join(" ").to_lowercase();
+                let len = 2 + items
+                    .iter()
+                    .filter(|s| s.matches(!options.all, &query))
+                    .count();
+                match mouse.kind {
+                    MouseEventKind::ScrollDown | MouseEventKind::ScrollUp => {
+                        let delta = if mouse.kind == MouseEventKind::ScrollDown {
+                            3
+                        } else {
+                            -3
+                        };
+                        *offset = offset
+                            .saturating_add_signed(delta)
+                            .min(len.saturating_sub(area.height as usize));
+                        *manual_scroll = true;
+                    }
+                    MouseEventKind::Down(MouseButton::Left) => {
+                        let index = *offset + usize::from(mouse.row - area.y);
+                        if index < len {
+                            *selection = index;
+                            *search = false;
+                            return self.handle_modal(KeyEvent::new(K::Enter, M::NONE));
+                        }
+                    }
+                    _ => {}
                 }
             }
             return Ok(Effect::None);
+        }
+        if self.editor.is_some() || self.modal.is_some() {
+            return Ok(Effect::None);
+        }
+        let position = if self.stacked {
+            mouse.row
+        } else {
+            mouse.column
+        };
+        let (origin, extent) = self.pane_axis();
+        if matches!(
+            mouse.kind,
+            MouseEventKind::Drag(MouseButton::Left) | MouseEventKind::Up(MouseButton::Left)
+        ) {
+            if mouse.kind == MouseEventKind::Drag(MouseButton::Left) {
+                self.diff_click = None;
+            }
+            if let Some((start, percent)) = self.pane_drag {
+                if self.zoom < 2 && !self.pane_area.is_empty() {
+                    let delta = i32::from(position) - i32::from(start);
+                    self.set_sidebar_percent(percent + delta * 100 / i32::from(extent));
+                }
+                if mouse.kind == MouseEventKind::Up(MouseButton::Left) {
+                    self.pane_drag = None;
+                }
+                return Ok(Effect::None);
+            }
+            if self.diff_inner.is_empty() {
+                self.drag_start = None;
+                self.divider_drag = None;
+                return Ok(Effect::None);
+            }
+            if let Some((start_x, bias)) = self.divider_drag {
+                if let Some(view) = self.view() {
+                    let available = (view.widths[0] + view.widths[1]).max(1) as i32;
+                    let delta = i32::from(mouse.column) - i32::from(start_x);
+                    self.set_diff_bias(bias + delta * 100 / available);
+                }
+                if mouse.kind == MouseEventKind::Up(MouseButton::Left) {
+                    self.divider_drag = None;
+                }
+                return Ok(Effect::None);
+            }
+            if let Some((start, side)) = self.drag_start {
+                let y = mouse.row.clamp(
+                    self.diff_inner.y,
+                    self.diff_inner.bottom().saturating_sub(1),
+                );
+                let target = self.offset + y.saturating_sub(self.diff_inner.y) as usize;
+                self.side = side;
+                self.move_selection(if target < self.cursor[0] { -1 } else { 1 }, Some(target));
+                if self.cursor[0] != start || self.anchor.is_some() {
+                    self.anchor = Some((start, side));
+                }
+            }
+            if mouse.kind == MouseEventKind::Up(MouseButton::Left) {
+                let click = self.diff_click.take();
+                if self.drag_start.take().is_some() && self.anchor.is_some() {
+                    self.start_edit(None, false)?;
+                } else if click == Some((self.cursor[0], self.side))
+                    && self.diff_inner.contains((mouse.column, mouse.row).into())
+                    && self.offset + usize::from(mouse.row - self.diff_inner.y) == self.cursor[0]
+                {
+                    self.start_edit(self.selected_ref(), false)?;
+                }
+            }
+            return Ok(Effect::None);
+        }
+        if mouse.kind == MouseEventKind::Down(MouseButton::Left) {
+            self.clear_drag();
+            let sidebar_size = (i32::from(extent) * self.sidebar_percent / 100) as u16;
+            let boundary = origin + sidebar_size;
+            if self.zoom < 2
+                && sidebar_size > 0
+                && sidebar_size < extent
+                && self.pane_area.contains((mouse.column, mouse.row).into())
+                && (position == boundary || position == boundary - 1)
+                && !self
+                    .diff_mode_rects
+                    .iter()
+                    .any(|r| r.contains((mouse.column, mouse.row).into()))
+            {
+                self.pane_drag = Some((position, self.sidebar_percent));
+                return Ok(Effect::None);
+            }
+            if self.split()
+                && self.diff_inner.contains((mouse.column, mouse.row).into())
+                && self.view().is_some_and(|v| {
+                    usize::from(mouse.column - self.diff_inner.x) == v.digits + v.widths[0] + 2
+                })
+            {
+                self.focus(0);
+                self.divider_drag = Some((mouse.column, self.bias));
+                return Ok(Effect::None);
+            }
+            for mode in 0..2 {
+                if self.diff_mode_rects[mode].contains((mouse.column, mouse.row).into()) {
+                    self.set_split(mode == 1)?;
+                    self.focus(0);
+                    return Ok(Effect::None);
+                }
+            }
+        }
+        for pane in 0..4 {
+            if self.pane_rects[pane].contains((mouse.column, mouse.row).into()) {
+                match mouse.kind {
+                    MouseEventKind::ScrollDown | MouseEventKind::ScrollUp => {
+                        let delta = if mouse.kind == MouseEventKind::ScrollDown {
+                            3
+                        } else {
+                            -3
+                        };
+                        let height = self.pane_rects[pane].height.saturating_sub(2) as usize;
+                        let len = if pane == 0 {
+                            self.view().map_or(0, |v| v.len())
+                        } else {
+                            self.labels[pane].len()
+                        };
+                        let offset = if pane == 0 {
+                            &mut self.offset
+                        } else {
+                            &mut self.list_offsets[pane]
+                        };
+                        *offset = offset
+                            .saturating_add_signed(delta)
+                            .min(len.saturating_sub(height));
+                        self.manual_scroll[pane] = true;
+                    }
+                    MouseEventKind::Down(MouseButton::Left) => {
+                        let focused = self.pane == pane;
+                        self.focus(pane);
+                        if pane == 0 {
+                            if !self.diff_inner.contains((mouse.column, mouse.row).into()) {
+                                return Ok(Effect::None);
+                            }
+                            let side = if self.split() {
+                                usize::from(
+                                    mouse.column
+                                        >= self.diff_inner.x
+                                            + self
+                                                .view()
+                                                .map_or(0, |v| (v.digits + v.widths[0] + 3) as u16),
+                                )
+                            } else {
+                                0
+                            };
+                            let target =
+                                self.offset + mouse.row.saturating_sub(self.diff_inner.y) as usize;
+                            if !self.view().is_some_and(|v| v.selectable(target, side)) {
+                                return Ok(Effect::None);
+                            }
+                            let activate = focused && self.side == side && self.cursor[0] == target;
+                            self.anchor = None;
+                            self.side = side;
+                            self.move_selection(1, Some(target));
+                            if self
+                                .view()
+                                .and_then(|v| v.source(self.cursor[0], side))
+                                .is_some()
+                            {
+                                self.drag_start = Some((self.cursor[0], side));
+                            }
+                            if activate
+                                && (self.drag_start.is_some() || self.selected_ref().is_some())
+                            {
+                                self.diff_click = Some((target, side));
+                            }
+                        } else {
+                            if !self.pane_rects[pane]
+                                .inner(ratatui::layout::Margin::new(1, 1))
+                                .contains((mouse.column, mouse.row).into())
+                            {
+                                return Ok(Effect::None);
+                            }
+                            let index = self.list_offsets[pane]
+                                + mouse.row.saturating_sub(self.pane_rects[pane].y + 1) as usize;
+                            if index >= self.labels[pane].len() {
+                                return Ok(Effect::None);
+                            }
+                            let activate = pane == 3 || focused && self.cursor[pane] == index;
+                            self.move_selection(1, Some(index));
+                            if activate {
+                                match pane {
+                                    1 if matches!(
+                                        self.tree_rows.get(index),
+                                        Some(FileRow::File(_))
+                                    ) =>
+                                    {
+                                        self.start_edit(None, true)?;
+                                    }
+                                    2 | 3 => self.activate_selection()?,
+                                    _ => {}
+                                }
+                                return Ok(Effect::None);
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+                break;
+            }
+        }
+        Ok(Effect::None)
+    }
+    fn handle_editor(&mut self, key: KeyEvent) -> Result<Effect> {
+        match key.code {
+            K::Esc => self.close_editor(),
+            _ if save_key(key) => self.save_editor()?,
+            _ => {
+                self.editor.as_mut().unwrap().input.input(key);
+            }
+        }
+        Ok(Effect::None)
+    }
+    fn handle_key(&mut self, key: KeyEvent) -> Result<Effect> {
+        if key.kind == KeyEventKind::Release {
+            return Ok(Effect::None);
+        }
+        self.clear_drag();
+        if self.editor.is_some() {
+            return self.handle_editor(key);
         }
         if self.modal.is_some() {
             return self.handle_modal(key);
@@ -2027,24 +2038,7 @@ impl App {
             }
             K::Char('c') if self.pane != 2 => self.start_edit(None, self.pane == 1)?,
             K::Char('e') if self.pane != 2 => return Ok(Effect::Editor),
-            K::Enter => match self.pane {
-                1 => {
-                    if !self.set_directory_expanded(None) {
-                        self.focus(0);
-                    }
-                }
-                3 => self.select_commit()?,
-                2 => {
-                    if let Some(r) = self.selected_ref() {
-                        if r.history {
-                            self.modal = Some(Modal::Inspect(self.inspect(r)));
-                        } else {
-                            self.start_edit(Some(r), false)?;
-                        }
-                    }
-                }
-                _ => self.start_edit(self.selected_ref(), false)?,
-            },
+            K::Enter => self.activate_selection()?,
             K::Char('-' | '=') if self.pane == 1 => {
                 self.set_directory_expanded(Some(code == K::Char('=')));
             }
@@ -2055,6 +2049,27 @@ impl App {
             _ => {}
         }
         Ok(Effect::None)
+    }
+    fn activate_selection(&mut self) -> Result<()> {
+        match self.pane {
+            1 => {
+                if !self.set_directory_expanded(None) {
+                    self.focus(0);
+                }
+            }
+            3 => self.select_commit()?,
+            2 => {
+                if let Some(r) = self.selected_ref() {
+                    if r.history {
+                        self.modal = Some(Modal::Inspect(self.inspect(r)));
+                    } else {
+                        self.start_edit(Some(r), false)?;
+                    }
+                }
+            }
+            _ => self.start_edit(self.selected_ref(), false)?,
+        }
+        Ok(())
     }
     fn handle_modal(&mut self, key: KeyEvent) -> Result<Effect> {
         let mut modal = self.modal.take().unwrap();
