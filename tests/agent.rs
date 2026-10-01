@@ -51,6 +51,13 @@ fn websocket_over_unix_loaded_detection() {
             let request: serde_json::Value =
                 serde_json::from_str(ws.read().unwrap().to_text().unwrap()).unwrap();
             assert_eq!(request["method"], "initialize");
+            for message in [
+                json!({"method":"notification"}),
+                json!({"id":999,"result":{}}),
+            ] {
+                ws.send(tungstenite::Message::Text(message.to_string().into()))
+                    .unwrap();
+            }
             ws.send(tungstenite::Message::Text(
                 json!({"id":request["id"],"result":{}}).to_string().into(),
             ))

@@ -1,6 +1,7 @@
 use crate::{
     agent,
     diff::{FileView, Row, commit_graph},
+    palette,
     review::{self, Comment, Commit, Review},
 };
 use anyhow::{Context, Result, ensure};
@@ -646,11 +647,11 @@ impl App {
             let mut spans = vec![Span::raw("  ".repeat(depth))];
             spans.extend(status.chars().map(|ch| {
                 let color = match ch {
-                    'A' => Color::LightGreen,
-                    'M' | 'T' => Color::Rgb(255, 255, 0),
-                    '?' | 'D' => Color::Rgb(255, 0, 0),
-                    'R' | 'C' => Color::Rgb(0, 255, 255),
-                    'U' => Color::Rgb(255, 0, 255),
+                    'A' => palette::ADDED,
+                    'M' | 'T' => palette::MODIFIED,
+                    '?' | 'D' => palette::REMOVED,
+                    'R' | 'C' => palette::RENAMED,
+                    'U' => palette::CONFLICT,
                     _ => Color::Reset,
                 };
                 Span::styled(ch.to_string(), Style::default().fg(color))
@@ -659,7 +660,7 @@ impl App {
                 Span::styled(
                     f.path.rsplit('/').next().unwrap_or(&f.path).to_owned(),
                     if open > 0 {
-                        Style::default().fg(Color::Rgb(255, 255, 0))
+                        Style::default().fg(palette::NOTICE)
                     } else {
                         Style::default()
                     },
@@ -670,12 +671,9 @@ impl App {
                     String::new()
                 }),
                 Span::raw("  "),
-                Span::styled(format!("+{added}"), Style::default().fg(Color::LightGreen)),
+                Span::styled(format!("+{added}"), Style::default().fg(palette::ADDED)),
                 Span::raw(" "),
-                Span::styled(
-                    format!("-{removed}"),
-                    Style::default().fg(Color::Rgb(255, 0, 0)),
-                ),
+                Span::styled(format!("-{removed}"), Style::default().fg(palette::REMOVED)),
             ]);
             self.labels[1].push(Line::from(spans));
         }
@@ -751,15 +749,19 @@ impl App {
                         Span::styled(
                             if c.done { "Done" } else { "Open" },
                             Style::default().fg(if c.done {
-                                Color::LightGreen
+                                palette::COMMENT_DONE
                             } else {
-                                Color::Yellow
+                                palette::COMMENT_OPEN
                             }),
                         ),
                         Span::raw("/"),
                         Span::styled(
                             if c.sent { "Sent" } else { "Unsent" },
-                            Style::default().fg(if c.sent { Color::Cyan } else { Color::LightRed }),
+                            Style::default().fg(if c.sent {
+                                palette::COMMENT_SENT
+                            } else {
+                                palette::COMMENT_UNSENT
+                            }),
                         ),
                         Span::raw(format!(
                             "]{} {} · {}{}",
@@ -802,7 +804,7 @@ impl App {
                     } else {
                         String::new()
                     },
-                    Style::default().fg(Color::Rgb(0, 255, 255)),
+                    Style::default().fg(palette::COMMIT_GRAPH),
                 ),
                 Span::raw(format!(" {}", &c.id[..c.id.len().min(8)])),
                 Span::styled(
@@ -811,7 +813,7 @@ impl App {
                     } else {
                         format!(" {}", c.refs)
                     },
-                    Style::default().fg(Color::Rgb(255, 255, 0)),
+                    Style::default().fg(palette::NOTICE),
                 ),
                 Span::raw(format!(" {}", c.subject)),
             ]));

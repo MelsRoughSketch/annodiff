@@ -1,6 +1,7 @@
 use crate::{
     app::{App, Confirmation, FileRow, Inspection, Modal},
     diff::{FileView, Row},
+    palette,
     review::File,
 };
 use ratatui::{
@@ -13,67 +14,15 @@ use ratatui::{
 use ratatui_textarea::TextArea;
 use unicode_width::UnicodeWidthStr;
 
-const SELECT: Color = Color::LightCyan;
-const LIST_SELECTION_BG: Color = Color::Rgb(224, 255, 255);
-
-fn luminance([r, g, b]: [u8; 3]) -> f64 {
-    let linear = |v: u8| {
-        let v = f64::from(v) / 255.;
-        if v <= 0.04045 {
-            v / 12.92
-        } else {
-            ((v + 0.055) / 1.055).powf(2.4)
-        }
-    };
-    0.2126 * linear(r) + 0.7152 * linear(g) + 0.0722 * linear(b)
-}
-fn selected_foreground(color: Color) -> Color {
-    // ANSI colors are theme-dependent; use conventional RGB values as estimates.
-    // RGB colors (including the selection background) have exact contrast ratios.
-    let rgb = match color {
-        Color::Rgb(r, g, b) => [r, g, b],
-        Color::Black => [0, 0, 0],
-        Color::Red => [128, 0, 0],
-        Color::Green => [0, 128, 0],
-        Color::Yellow => [128, 128, 0],
-        Color::Blue => [0, 0, 128],
-        Color::Magenta => [128, 0, 128],
-        Color::Cyan => [0, 128, 128],
-        Color::Gray => [192, 192, 192],
-        Color::DarkGray => [128, 128, 128],
-        Color::LightRed => [255, 0, 0],
-        Color::LightGreen => [0, 255, 0],
-        Color::LightYellow => [255, 255, 0],
-        Color::LightBlue => [0, 0, 255],
-        Color::LightMagenta => [255, 0, 255],
-        Color::LightCyan => [0, 255, 255],
-        Color::White => [255, 255, 255],
-        Color::Reset | Color::Indexed(_) => return Color::Black,
-    };
-    let Color::Rgb(r, g, b) = LIST_SELECTION_BG else {
-        unreachable!()
-    };
-    let background = luminance([r, g, b]);
-    let readable = |rgb| {
-        let foreground = luminance(rgb);
-        (foreground.max(background) + 0.05) / (foreground.min(background) + 0.05) >= 4.5
-    };
-    if readable(rgb) {
-        return color;
-    }
-    let inverse = rgb.map(|v| 255 - v);
-    if readable(inverse) {
-        Color::Rgb(inverse[0], inverse[1], inverse[2])
-    } else {
-        Color::Black
-    }
-}
-
 fn block(title: impl Into<Line<'static>>, focus: bool) -> Block<'static> {
     Block::default()
         .borders(Borders::ALL)
         .title(title)
-        .border_style(Style::default().fg(if focus { SELECT } else { Color::DarkGray }))
+        .border_style(Style::default().fg(if focus {
+            palette::FOCUS
+        } else {
+            palette::MUTED
+        }))
 }
 fn bordered(frame: &mut Frame, rect: Rect, title: String, focus: bool) -> Rect {
     let b = block(title, focus);
@@ -82,7 +31,9 @@ fn bordered(frame: &mut Frame, rect: Rect, title: String, focus: bool) -> Rect {
     inner
 }
 fn selected() -> Style {
-    Style::default().fg(Color::Black).bg(SELECT)
+    Style::default()
+        .fg(palette::SELECTION_TEXT)
+        .bg(palette::FOCUS)
 }
 fn text(frame: &mut Frame, rect: Rect, value: &str, scroll: usize, wrap: bool) {
     if wrap {
@@ -128,30 +79,34 @@ fn list<'a, T: Clone + Into<Line<'a>>>(
         let gutter = if marker { 2.min(rect.width) } else { 0 };
         let area = Rect::new(rect.x + gutter, y, rect.width - gutter, 1);
         let row_background = if marker && focus && line == cursor {
-            Color::Rgb(84, 84, 84)
+            palette::LIST_CURSOR_BG
         } else {
             Color::Reset
         };
         if marker && line == cursor && gutter > 0 {
             frame.render_widget(
                 Paragraph::new("▶").style(Style::default().bg(row_background).fg(if focus {
-                    Color::Rgb(80, 220, 220)
+                    palette::LIST_CURSOR_FG
                 } else {
-                    Color::DarkGray
+                    palette::MUTED
                 })),
                 Rect::new(rect.x, y, gutter, 1),
             );
         }
         let style = if !marker && line == cursor {
             if focus {
-                Style::default().fg(Color::Black).bg(LIST_SELECTION_BG)
+                Style::default()
+                    .fg(palette::SELECTION_TEXT)
+                    .bg(palette::LIST_SELECTION_BG)
             } else {
-                Style::default().fg(Color::Reset).bg(Color::Rgb(72, 72, 72))
+                Style::default()
+                    .fg(Color::Reset)
+                    .bg(palette::LIST_INACTIVE_SELECTION_BG)
             }
         } else {
             Style::default()
                 .fg(if row_background != Color::Reset {
-                    Color::White
+                    palette::TEXT
                 } else {
                     Color::Reset
                 })
@@ -162,12 +117,12 @@ fn list<'a, T: Clone + Into<Line<'a>>>(
             label.style = label.style.add_modifier(ratatui::style::Modifier::BOLD);
         }
         if !marker && focus && line == cursor {
-            let foreground = label.style.fg.unwrap_or(Color::Black);
-            label.style = label.style.fg(selected_foreground(foreground));
+            let foreground = label.style.fg.unwrap_or(palette::SELECTION_TEXT);
+            label.style = label.style.fg(palette::selected_foreground(foreground));
             for span in &mut label.spans {
-                span.style = span
-                    .style
-                    .fg(selected_foreground(span.style.fg.unwrap_or(foreground)));
+                span.style = span.style.fg(palette::selected_foreground(
+                    span.style.fg.unwrap_or(foreground),
+                ));
             }
         }
         frame.render_widget(Paragraph::new(label).style(style), area);
@@ -335,7 +290,7 @@ pub fn draw(app: &mut App, frame: &mut Frame) {
         }
     };
     frame.render_widget(
-        Paragraph::new(hint).style(Style::default().fg(SELECT)),
+        Paragraph::new(hint).style(Style::default().fg(palette::FOCUS)),
         Rect::new(area.x, area.bottom() - 1, area.width, 1),
     );
 }
@@ -493,7 +448,7 @@ fn draw_diff(app: &mut App, frame: &mut Frame) {
                 if label {
                     frame.render_widget(
                         Paragraph::new("⋯ unchanged lines omitted · z: expand nearby ⋯")
-                            .style(Style::default().fg(Color::DarkGray)),
+                            .style(Style::default().fg(palette::MUTED)),
                         area,
                     );
                 }
@@ -539,11 +494,11 @@ fn draw_diff(app: &mut App, frame: &mut Frame) {
                 } else {
                     Style::default()
                         .fg(if f.comments[index].done {
-                            Color::LightGreen
+                            palette::COMMENT_DONE
                         } else {
-                            Color::Yellow
+                            palette::COMMENT_OPEN
                         })
-                        .bg(Color::Rgb(35, 44, 50))
+                        .bg(palette::COMMENT_BG)
                 };
                 let prefix: String = prefix
                     .chars()
@@ -583,7 +538,7 @@ fn draw_diff(app: &mut App, frame: &mut Frame) {
                                 " ".repeat(view.digits)
                             };
                             frame.render_widget(
-                                Paragraph::new(number).style(bg.fg(Color::DarkGray)),
+                                Paragraph::new(number).style(bg.fg(palette::MUTED)),
                                 Rect::new(x, area.y, view.digits as u16, 1),
                             );
                             frame.render_widget(
@@ -595,9 +550,9 @@ fn draw_diff(app: &mut App, frame: &mut Frame) {
                                 ))
                                 .style(bg.fg(
                                     if app.cursor[0] == visual && app.side == side {
-                                        Color::Black
+                                        palette::SELECTION_TEXT
                                     } else {
-                                        Color::Rgb(255, 255, 0)
+                                        palette::NOTICE
                                     },
                                 )),
                                 Rect::new(code_x - 1, area.y, 1, 1),
@@ -616,7 +571,7 @@ fn draw_diff(app: &mut App, frame: &mut Frame) {
                     let x = area.x + (view.digits + view.widths[0] + 2) as u16;
                     if x < area.right() {
                         frame.render_widget(
-                            Paragraph::new("│").style(Style::default().fg(Color::DarkGray)),
+                            Paragraph::new("│").style(Style::default().fg(palette::MUTED)),
                             Rect::new(x, area.y, 1, 1),
                         );
                     }
@@ -645,7 +600,7 @@ fn draw_diff(app: &mut App, frame: &mut Frame) {
                     );
                     let number_width = (2 * view.digits + 3) as u16;
                     frame.render_widget(
-                        Paragraph::new(numbers).style(bg.fg(Color::DarkGray)),
+                        Paragraph::new(numbers).style(bg.fg(palette::MUTED)),
                         Rect::new(area.x, area.y, number_width.min(area.width), 1),
                     );
                     if number_width < area.width {
@@ -659,9 +614,9 @@ fn draw_diff(app: &mut App, frame: &mut Frame) {
                             ))
                             .style(bg.fg(
                                 if app.cursor[0] == visual {
-                                    Color::Black
+                                    palette::SELECTION_TEXT
                                 } else {
-                                    Color::Rgb(255, 255, 0)
+                                    palette::NOTICE
                                 },
                             )),
                             Rect::new(area.x + (2 * view.digits + 1) as u16, area.y, 1, 1),
@@ -744,25 +699,25 @@ fn background(
     bounds: Option<(usize, usize)>,
 ) -> Style {
     let l = &f.lines[index];
-    let mut style = Style::default().fg(Color::White);
+    let mut style = Style::default().fg(palette::TEXT);
     if l.old > 0 && l.new == 0 {
-        style = style.bg(Color::Rgb(55, 25, 30));
+        style = style.bg(palette::REMOVAL_BG);
     }
     if l.old == 0 && l.new > 0 {
-        style = style.bg(Color::Rgb(20, 45, 30));
+        style = style.bg(palette::ADDITION_BG);
     }
     if app
         .view()
         .is_some_and(|v| v.comments[index][side].is_some())
     {
-        style = style.bg(Color::Rgb(35, 44, 50));
+        style = style.bg(palette::COMMENT_BG);
     }
     if !app.queries[0].is_empty()
         && l.text
             .to_lowercase()
             .contains(&app.queries[0].to_lowercase())
     {
-        style = style.bg(Color::Rgb(140, 100, 20));
+        style = style.bg(palette::SEARCH_BG);
     }
     if app.anchor.is_some()
         && side == app.side
@@ -772,7 +727,7 @@ fn background(
                 .is_some_and(|i| i >= a && i <= b)
         })
     {
-        style = style.bg(Color::Rgb(55, 62, 68));
+        style = style.bg(palette::RANGE_BG);
     }
     if app.cursor[0] == visual && (!app.split() || side == app.side) {
         style = selected();
@@ -1461,7 +1416,7 @@ fn help_lines(app: &App) -> Vec<Line<'static>> {
         .map(|line| {
             if let Some((key, description)) = line.split_once(": ") {
                 Line::from(vec![
-                    Span::styled(key.to_owned(), Style::default().fg(Color::Rgb(0, 255, 255))),
+                    Span::styled(key.to_owned(), Style::default().fg(palette::KEY)),
                     Span::raw(" ".repeat(width - key.width() + 3)),
                     Span::raw(description.to_owned()),
                 ])
@@ -1469,44 +1424,10 @@ fn help_lines(app: &App) -> Vec<Line<'static>> {
                 Line::styled(
                     line.to_owned(),
                     Style::default()
-                        .fg(Color::Rgb(255, 255, 0))
+                        .fg(palette::NOTICE)
                         .add_modifier(ratatui::style::Modifier::BOLD),
                 )
             }
         })
         .collect()
-}
-
-#[cfg(test)]
-mod contrast_tests {
-    use super::*;
-    #[test]
-    fn selected_colors_preserve_readable_colors_and_check_inversion() {
-        assert_eq!(
-            selected_foreground(Color::Rgb(255, 255, 0)),
-            Color::Rgb(0, 0, 255)
-        );
-        for color in [
-            Color::Rgb(128, 0, 0),
-            Color::Rgb(0, 128, 0),
-            Color::Rgb(0, 0, 128),
-        ] {
-            assert_eq!(selected_foreground(color), color);
-        }
-        assert_eq!(selected_foreground(Color::Rgb(255, 0, 0)), Color::Black);
-        for r in [0, 64, 128, 192, 255] {
-            for g in [0, 64, 128, 192, 255] {
-                for b in [0, 64, 128, 192, 255] {
-                    let color = selected_foreground(Color::Rgb(r, g, b));
-                    let fg = match color {
-                        Color::Rgb(r, g, b) => luminance([r, g, b]),
-                        Color::Black => 0.,
-                        _ => unreachable!(),
-                    };
-                    let bg = luminance([224, 255, 255]);
-                    assert!((fg.max(bg) + 0.05) / (fg.min(bg) + 0.05) >= 4.5);
-                }
-            }
-        }
-    }
 }
