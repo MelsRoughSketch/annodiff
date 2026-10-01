@@ -1269,10 +1269,13 @@ fn quit_from_session_picker_and_preview_but_type_q_in_search() {
         search: true,
     });
     assert!(matches!(press(&mut app, K::Char('q')), Effect::None));
-    assert!(matches!(&app.modal, Some(Modal::Sessions {
-filters: SessionFilters { input, .. },
-..
-}) if input.lines() == ["q"]));
+    assert!(matches!(
+        &app.modal,
+        Some(Modal::Sessions {
+            filters: SessionFilters { input, .. },
+            ..
+        }) if input.lines() == ["q"]
+    ));
     press(&mut app, K::Tab);
     assert!(matches!(press(&mut app, K::Char('q')), Effect::Quit));
     for pane in 0..3 {
@@ -1410,11 +1413,17 @@ fn session_directory_scope_combines_with_search_and_selects_visible_session() {
     };
     let items = items.clone();
     press(&mut app, K::Char('a'));
-    assert!(matches!(&app.modal, Some(Modal::Loading {
-filters: SessionFilters { options, input, control: 0 },
-..
-})
-        if options.all && input.lines() == ["fix"]));
+    assert!(matches!(
+        &app.modal,
+        Some(Modal::Loading {
+            filters: SessionFilters {
+                options,
+                input,
+                control: 0
+            },
+            ..
+        }) if options.all && input.lines() == ["fix"]
+    ));
     app.close_modal();
     app.modal = Some(Modal::Sessions {
         offset: 0,
@@ -1438,10 +1447,17 @@ filters: SessionFilters { options, input, control: 0 },
     assert!(screen(&terminal).contains("Fix elsewhere"));
     press(&mut app, K::Char('/'));
     press(&mut app, K::Char('a'));
-    assert!(matches!(&app.modal, Some(Modal::Sessions {
-filters: SessionFilters { options: annodiff::agent::SessionOptions { all: true, .. }, input, .. },
-..
-}) if input.lines()[0].contains('a')));
+    assert!(matches!(
+        &app.modal,
+        Some(Modal::Sessions {
+            filters: SessionFilters {
+                options: annodiff::agent::SessionOptions { all: true, .. },
+                input,
+                ..
+            },
+            ..
+        }) if input.lines()[0].contains('a')
+    ));
     if let Some(Modal::Sessions {
         filters: SessionFilters { input, .. },
         ..
@@ -3436,11 +3452,18 @@ fn session_picker_sort_and_archived_reload_preserve_filters() {
     }
     assert!(!loading_screen.contains("New session in this directory"));
     assert!(app.poll());
-    assert!(matches!(&app.modal, Some(Modal::Sessions {
-filters: SessionFilters { options: loaded, input, control: 1 },
-selection: 0,
-..
-}) if *loaded == options && input.lines() == ["find"]));
+    assert!(matches!(
+        &app.modal,
+        Some(Modal::Sessions {
+            filters: SessionFilters {
+                options: loaded,
+                input,
+                control: 1
+            },
+            selection: 0,
+            ..
+        }) if *loaded == options && input.lines() == ["find"]
+    ));
     draw(&mut app, &mut terminal);
     let screen: String = terminal
         .backend()
@@ -3599,12 +3622,18 @@ fn session_picker_scroll_margin_and_wheel_preserve_selection() {
         modifiers: M::NONE,
     }))
     .unwrap();
-    assert!(matches!(&app.modal, Some(Modal::Sessions {
-filters: SessionFilters { options, control: 2, input },
-search: false,
-..
-})
-        if options.created && input.lines() == ["Session 49"]));
+    assert!(matches!(
+        &app.modal,
+        Some(Modal::Sessions {
+            filters: SessionFilters {
+                options,
+                control: 2,
+                input
+            },
+            search: false,
+            ..
+        }) if options.created && input.lines() == ["Session 49"]
+    ));
     // Clicking the selected value again must not toggle, reset selection, or reload.
     draw(&mut app, &mut terminal);
     for control in 0..3 {
@@ -3625,10 +3654,13 @@ search: false,
             modifiers: M::NONE,
         }))
         .unwrap();
-        assert!(matches!(&app.modal, Some(Modal::Sessions {
-filters: SessionFilters { options, .. },
-..
-}) if !options.all && !options.archived && options.created));
+        assert!(matches!(
+            &app.modal,
+            Some(Modal::Sessions {
+                filters: SessionFilters { options, .. },
+                ..
+            }) if !options.all && !options.archived && options.created
+        ));
         draw(&mut app, &mut terminal);
     }
     terminal.backend_mut().resize(120, 8);
