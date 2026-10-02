@@ -106,7 +106,8 @@ or claiming a loading-time fix.
 - Keep atomic saves, state locking, validation, rollback, and Git fallbacks.
 - Keep Unicode wrapping, IME cursor placement, bounded caching, incremental
   highlighting, and selection contrast checks.
-- #56 and #57 are labeled invalid and are not confirmed bug fixes in this plan.
+- #56 is labeled invalid. #57 was reclassified as a confirmed selection-visibility
+  issue; checked commits now remain visible during search.
   #52 is labeled wontfix. Do not reopen the rejected #58 color change.
 - No dependency removal or new dependency was justified by the audit.
 - Run formatting, Clippy, Rust tests, CLI/terminal checks, release-workflow checks,

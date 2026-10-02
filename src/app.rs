@@ -790,19 +790,17 @@ impl App {
             self.commit_rows.push(None);
         }
         for (i, c) in self.commits.iter().enumerate() {
-            if !format!("{} {} {}", c.id, c.subject, c.refs)
-                .to_lowercase()
-                .contains(&query)
+            let checked = c.id == self.review.base || c.id == self.review.target;
+            if !checked
+                && !format!("{} {} {}", c.id, c.subject, c.refs)
+                    .to_lowercase()
+                    .contains(&query)
             {
                 continue;
             }
             self.commit_rows.push(Some(i));
             self.labels[3].push(Line::from(vec![
-                Span::raw(if c.id == self.review.base || c.id == self.review.target {
-                    "[x] "
-                } else {
-                    "[ ] "
-                }),
+                Span::raw(if checked { "[x] " } else { "[ ] " }),
                 Span::styled(
                     if query.is_empty() {
                         self.graphs.get(i).cloned().unwrap_or_default()

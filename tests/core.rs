@@ -581,6 +581,121 @@ fn file_expand_preserves_diff_comments_and_supports_full_file_navigation() {
 }
 
 #[test]
+fn commit_search_keeps_checked_commits_visible_and_allows_replacement() {
+    use crossterm::event::{MouseButton, MouseEvent, MouseEventKind};
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    git(root, &["init", "-q"]);
+    for subject in ["selected oldest", "selected newest", "needle candidate"] {
+        fs::write(root.join("file.txt"), format!("{subject}\n")).unwrap();
+        git(root, &["add", "."]);
+        git(
+            root,
+            &[
+                "-c",
+                "user.name=Test",
+                "-c",
+                "user.email=t@x",
+                "-c",
+                "commit.gpgsign=false",
+                "commit",
+                "-qm",
+                subject,
+            ],
+        );
+    }
+    let snapshot = review::snapshot(root.to_str().unwrap(), "", "").unwrap();
+    let commits = review::commits(root.to_str().unwrap()).unwrap();
+    for key in [Some(K::Enter), Some(K::Char(' ')), None] {
+        let mut app = App::new(snapshot.clone(), root.join(".git/review.json"));
+        app.commits = commits.clone();
+        app.rebuild_lists();
+        app.focus(3);
+        let mut terminal = Terminal::new(TestBackend::new(120, 36)).unwrap();
+        let activate = |app: &mut App, terminal: &mut Terminal<TestBackend>, commit| {
+            let row = app
+                .commit_rows
+                .iter()
+                .position(|r| *r == Some(commit))
+                .unwrap();
+            app.move_selection(1, Some(row));
+            draw(app, terminal);
+            if let Some(key) = key {
+                press(app, key);
+            } else {
+                let rect = app.pane_rects[3];
+                app.handle(Event::Mouse(MouseEvent {
+                    kind: MouseEventKind::Down(MouseButton::Left),
+                    column: rect.x + 2,
+                    row: rect.y + 1 + (row - app.list_offsets[3]) as u16,
+                    modifiers: M::NONE,
+                }))
+                .unwrap();
+            }
+        };
+        activate(&mut app, &mut terminal, 2);
+        app.filter(3, "absent".into());
+        assert_eq!(app.commit_rows, [Some(2)]);
+        assert!(app.labels[3][0].to_string().starts_with("[x]"));
+        assert_eq!(app.review.base, commits[2].id);
+        assert!(app.review.target.is_empty());
+
+        app.filter(3, "selected".into());
+        assert_eq!(app.commit_rows, [Some(1), Some(2)]);
+        activate(&mut app, &mut terminal, 1);
+        assert_eq!(
+            (&app.review.base, &app.review.target),
+            (&commits[2].id, &commits[1].id)
+        );
+        app.filter(3, String::new());
+        press(&mut app, K::Char('/'));
+        app.handle(Event::Paste("needle".into())).unwrap();
+        press(&mut app, K::Enter);
+        assert_eq!(app.commit_rows, [Some(0), Some(1), Some(2)]);
+        for (row, checked) in [(0, false), (1, true), (2, true)] {
+            assert!(app.labels[3][row].to_string().starts_with(if checked {
+                "[x]"
+            } else {
+                "[ ]"
+            }));
+        }
+        app.move_selection(1, Some(0));
+        assert!(
+            app.select_commit()
+                .unwrap_err()
+                .to_string()
+                .contains("at most two commits")
+        );
+        assert_eq!(
+            (&app.review.base, &app.review.target),
+            (&commits[2].id, &commits[1].id)
+        );
+
+        activate(&mut app, &mut terminal, 2);
+        assert_eq!(app.commit_rows, [Some(0), Some(1)]);
+        assert_eq!(app.review.base, commits[1].id);
+        assert!(app.review.target.is_empty());
+        assert_eq!(app.queries[3], "needle");
+        activate(&mut app, &mut terminal, 0);
+        assert_eq!(
+            (&app.review.base, &app.review.target),
+            (&commits[1].id, &commits[0].id)
+        );
+        assert_eq!(app.queries[3], "needle");
+        app.filter(3, "absent".into());
+        assert_eq!(app.commit_rows, [Some(0), Some(1)]);
+        app.filter(3, "needle".into());
+        assert_eq!(app.commit_rows, [Some(0), Some(1)]);
+        press(&mut app, K::Esc);
+        assert_eq!(app.commit_rows, [None, Some(0), Some(1), Some(2)]);
+        assert_eq!(
+            (&app.review.base, &app.review.target),
+            (&commits[1].id, &commits[0].id)
+        );
+    }
+}
+
+#[test]
 fn commit_click_matches_keyboard_selection_after_scrolling() {
     use crossterm::event::{MouseButton, MouseEvent, MouseEventKind};
     let dir = tempfile::tempdir().unwrap();
