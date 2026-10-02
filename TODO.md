@@ -36,16 +36,16 @@ branch until it is merged.
   history references, and file selection through filter/fold changes.
 - [x] Split `App::handle` into focused mouse, editor, modal, and key handlers.
   Share sidebar activation directly between mouse and keyboard handling.
-  Session-picker key synthesis remains part of the next step.
+  Session-picker key synthesis remains a follow-up.
   Preserve event ordering, press/release semantics, and pending clicks during drags.
 
 ## 3. Session picker state
 
-- [ ] Group the search input, options, and active control shared by Loading and
+- [x] Group the search input, options, and active control shared by Loading and
   Sessions; keep cancellation/worker ownership explicit.
-- [ ] Share session filtering between rendering, mouse handling, and key handling.
+- [x] Share session filtering between rendering, mouse handling, and key handling.
   Preserve new-session and clipboard entries and their selection positions.
-- [ ] Derive filter layout and hit areas from the labels that are rendered (#54).
+- [x] Derive filter layout and hit areas from the labels that are rendered (#54).
   Check both loading and loaded states at narrow terminal widths.
 - [ ] Consider representing preview destinations as an enum instead of an ID,
   clipboard flag, archived flag, and display label that must agree.

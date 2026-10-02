@@ -54,6 +54,12 @@ pub enum Confirmation {
     Delete(CommentRef),
     Reset,
 }
+#[derive(Default)]
+pub struct SessionFilters {
+    pub input: TextArea<'static>,
+    pub options: agent::SessionOptions,
+    pub control: usize,
+}
 pub enum Modal {
     Help {
         scroll: usize,
@@ -75,9 +81,7 @@ pub enum Modal {
     Loading {
         cancel: Arc<AtomicBool>,
         receiver: Receiver<Result<Vec<agent::Session>>>,
-        options: agent::SessionOptions,
-        input: TextArea<'static>,
-        control: usize,
+        filters: SessionFilters,
     },
     Sessions {
         offset: usize,
@@ -85,11 +89,9 @@ pub enum Modal {
         area: Rect,
         filter_areas: [[Rect; 2]; 3],
         items: Vec<agent::Session>,
-        input: TextArea<'static>,
         selection: usize,
         search: bool,
-        options: agent::SessionOptions,
-        control: usize,
+        filters: SessionFilters,
     },
     Preview {
         destination: String,
@@ -1397,15 +1399,10 @@ impl App {
     pub fn start_sessions(&mut self) -> Result<()> {
         ensure!(self.review.pending() > 0, "no unsent Open comments to send");
         self.fresh()?;
-        self.load_sessions(agent::SessionOptions::default(), TextArea::default(), 0);
+        self.load_sessions(SessionFilters::default());
         Ok(())
     }
-    fn load_sessions(
-        &mut self,
-        options: agent::SessionOptions,
-        input: TextArea<'static>,
-        control: usize,
-    ) {
+    fn load_sessions(&mut self, filters: SessionFilters) {
         self.close_modal();
         // Keep the initialized client in the completed worker between filter changes.
         let client = self
@@ -1414,6 +1411,7 @@ impl App {
             .and_then(|worker| worker.join().ok())
             .flatten();
         let root = self.session_cwd.clone();
+        let options = filters.options;
         let cancel = Arc::new(AtomicBool::new(false));
         let worker_cancel = cancel.clone();
         let (tx, receiver) = mpsc::channel();
@@ -1439,9 +1437,7 @@ impl App {
         self.modal = Some(Modal::Loading {
             cancel,
             receiver,
-            options,
-            input,
-            control,
+            filters,
         });
     }
     pub fn poll(&mut self) -> bool {
@@ -1457,13 +1453,7 @@ impl App {
                 );
                 Vec::new()
             });
-            let Some(Modal::Loading {
-                options,
-                input,
-                control,
-                ..
-            }) = self.modal.take()
-            else {
+            let Some(Modal::Loading { filters, .. }) = self.modal.take() else {
                 return false;
             };
             self.modal = Some(Modal::Sessions {
@@ -1472,11 +1462,9 @@ impl App {
                 area: Rect::default(),
                 filter_areas: [[Rect::default(); 2]; 3],
                 items,
-                input,
+                filters,
                 selection: 0,
                 search: false,
-                options,
-                control,
             });
             true
         } else {
@@ -1532,7 +1520,10 @@ impl App {
         }
         if let Some(
             Modal::Search { input, .. }
-            | Modal::Sessions { input, .. }
+            | Modal::Sessions {
+                filters: SessionFilters { input, .. },
+                ..
+            }
             | Modal::Help {
                 input,
                 search: true,
@@ -1562,17 +1553,20 @@ impl App {
     fn handle_mouse(&mut self, mouse: MouseEvent) -> Result<Effect> {
         if let Some(Modal::Sessions {
             items,
-            input,
-            options,
+            filters,
             offset,
             manual_scroll,
             area,
             filter_areas,
-            control,
             search,
             selection,
         }) = &mut self.modal
         {
+            let SessionFilters {
+                input,
+                options,
+                control,
+            } = filters;
             if mouse.kind == MouseEventKind::Down(MouseButton::Left)
                 && let Some(index) = filter_areas
                     .iter()
@@ -1590,10 +1584,7 @@ impl App {
             }
             if area.contains((mouse.column, mouse.row).into()) {
                 let query = input.lines().join(" ").to_lowercase();
-                let len = 2 + items
-                    .iter()
-                    .filter(|s| s.matches(!options.all, &query))
-                    .count();
+                let len = 2 + options.matching(items, query).count();
                 match mouse.kind {
                     MouseEventKind::ScrollDown | MouseEventKind::ScrollUp => {
                         let delta = if mouse.kind == MouseEventKind::ScrollDown {
@@ -2201,12 +2192,15 @@ impl App {
                 area: _,
                 filter_areas: _,
                 items,
-                input,
+                filters,
                 selection,
                 search,
-                options,
-                control,
             } => {
+                let SessionFilters {
+                    input,
+                    options,
+                    control,
+                } = filters;
                 if key.code == K::Esc {
                     return Ok(Effect::None);
                 }
@@ -2226,7 +2220,7 @@ impl App {
                             } else {
                                 options.archived = !options.archived;
                             }
-                            self.load_sessions(*options, std::mem::take(input), *control);
+                            self.load_sessions(std::mem::take(filters));
                             return Ok(Effect::None);
                         }
                         _ => {
@@ -2239,10 +2233,7 @@ impl App {
                     *manual_scroll = false;
                 }
                 let query = input.lines().join(" ").to_lowercase();
-                let filtered: Vec<_> = items
-                    .iter()
-                    .filter(|s| s.matches(!options.all, &query))
-                    .collect();
+                let filtered: Vec<_> = options.matching(items, query).collect();
                 if key.code == K::Enter || save_key(key) {
                     let copy = *selection == 1;
                     let id = if *selection > 1 {

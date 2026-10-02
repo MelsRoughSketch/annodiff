@@ -1,5 +1,5 @@
 use annodiff::{
-    app::{App, Effect, Modal},
+    app::{App, Effect, Modal, SessionFilters},
     diff::{CodeLine, FileView, Row, commit_graph},
     review::{self, Comment, Commit, File, Review},
 };
@@ -1260,14 +1260,22 @@ fn quit_from_session_picker_and_preview_but_type_q_in_search() {
         area: Default::default(),
         filter_areas: Default::default(),
         items: vec![],
-        input: Default::default(),
+        filters: SessionFilters {
+            input: Default::default(),
+            options: Default::default(),
+            control: 0,
+        },
         selection: 0,
         search: true,
-        options: Default::default(),
-        control: 0,
     });
     assert!(matches!(press(&mut app, K::Char('q')), Effect::None));
-    assert!(matches!(&app.modal, Some(Modal::Sessions { input, .. }) if input.lines() == ["q"]));
+    assert!(matches!(
+        &app.modal,
+        Some(Modal::Sessions {
+            filters: SessionFilters { input, .. },
+            ..
+        }) if input.lines() == ["q"]
+    ));
     press(&mut app, K::Tab);
     assert!(matches!(press(&mut app, K::Char('q')), Effect::Quit));
     for pane in 0..3 {
@@ -1288,9 +1296,11 @@ fn quit_from_session_picker_and_preview_but_type_q_in_search() {
     app.modal = Some(Modal::Loading {
         cancel: cancel.clone(),
         receiver,
-        options: Default::default(),
-        input: Default::default(),
-        control: 0,
+        filters: SessionFilters {
+            options: Default::default(),
+            input: Default::default(),
+            control: 0,
+        },
     });
     assert!(matches!(press(&mut app, K::Char('q')), Effect::Quit));
     assert!(cancel.load(std::sync::atomic::Ordering::Relaxed));
@@ -1341,11 +1351,13 @@ fn session_directory_scope_combines_with_search_and_selects_visible_session() {
             },
             other,
         ],
-        input: ratatui_textarea::TextArea::new(vec!["fix".into()]),
+        filters: SessionFilters {
+            input: ratatui_textarea::TextArea::new(vec!["fix".into()]),
+            options: Default::default(),
+            control: 0,
+        },
         selection: 2,
         search: false,
-        options: Default::default(),
-        control: 0,
     });
     let mut terminal = Terminal::new(TestBackend::new(120, 30)).unwrap();
     draw(&mut app, &mut terminal);
@@ -1401,10 +1413,17 @@ fn session_directory_scope_combines_with_search_and_selects_visible_session() {
     };
     let items = items.clone();
     press(&mut app, K::Char('a'));
-    assert!(
-        matches!(&app.modal, Some(Modal::Loading { options, input, control: 0, .. })
-        if options.all && input.lines() == ["fix"])
-    );
+    assert!(matches!(
+        &app.modal,
+        Some(Modal::Loading {
+            filters: SessionFilters {
+                options,
+                input,
+                control: 0
+            },
+            ..
+        }) if options.all && input.lines() == ["fix"]
+    ));
     app.close_modal();
     app.modal = Some(Modal::Sessions {
         offset: 0,
@@ -1412,24 +1431,38 @@ fn session_directory_scope_combines_with_search_and_selects_visible_session() {
         area: Default::default(),
         filter_areas: Default::default(),
         items,
-        input: ratatui_textarea::TextArea::new(vec!["fix".into()]),
+        filters: SessionFilters {
+            input: ratatui_textarea::TextArea::new(vec!["fix".into()]),
+            options: annodiff::agent::SessionOptions {
+                all: true,
+                ..Default::default()
+            },
+            control: 0,
+        },
         selection: 0,
         search: false,
-        options: annodiff::agent::SessionOptions {
-            all: true,
-            ..Default::default()
-        },
-        control: 0,
     });
     draw(&mut app, &mut terminal);
     assert!(screen(&terminal).contains("Filter: CWD / [All]"));
     assert!(screen(&terminal).contains("Fix elsewhere"));
     press(&mut app, K::Char('/'));
     press(&mut app, K::Char('a'));
-    assert!(
-        matches!(&app.modal, Some(Modal::Sessions { options: annodiff::agent::SessionOptions { all: true, .. }, input, .. }) if input.lines()[0].contains('a'))
-    );
-    if let Some(Modal::Sessions { input, .. }) = &mut app.modal {
+    assert!(matches!(
+        &app.modal,
+        Some(Modal::Sessions {
+            filters: SessionFilters {
+                options: annodiff::agent::SessionOptions { all: true, .. },
+                input,
+                ..
+            },
+            ..
+        }) if input.lines()[0].contains('a')
+    ));
+    if let Some(Modal::Sessions {
+        filters: SessionFilters { input, .. },
+        ..
+    }) = &mut app.modal
+    {
         *input = ratatui_textarea::TextArea::new(vec!["elsewhere".into()]);
     }
     press(&mut app, K::Tab);
@@ -3349,19 +3382,25 @@ fn session_picker_sort_and_archived_reload_preserve_filters() {
         area: Default::default(),
         filter_areas: Default::default(),
         items,
-        input: ratatui_textarea::TextArea::new(vec!["find".into()]),
+        filters: SessionFilters {
+            input: ratatui_textarea::TextArea::new(vec!["find".into()]),
+            options,
+            control: 0,
+        },
         selection: 3,
         search: false,
-        options,
-        control: 0,
     });
     press(&mut app, K::Tab);
     press(&mut app, K::Tab);
     press(&mut app, K::Right);
     let Some(Modal::Sessions {
         items,
-        options: selected,
-        input,
+        filters:
+            SessionFilters {
+                options: selected,
+                input,
+                ..
+            },
         selection,
         ..
     }) = &app.modal
@@ -3385,9 +3424,11 @@ fn session_picker_sort_and_archived_reload_preserve_filters() {
     app.modal = Some(Modal::Loading {
         cancel: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
         receiver,
-        options,
-        input: ratatui_textarea::TextArea::new(vec!["find".into()]),
-        control: 1,
+        filters: SessionFilters {
+            options,
+            input: ratatui_textarea::TextArea::new(vec!["find".into()]),
+            control: 1,
+        },
     });
     let mut terminal = Terminal::new(TestBackend::new(120, 30)).unwrap();
     draw(&mut app, &mut terminal);
@@ -3411,9 +3452,18 @@ fn session_picker_sort_and_archived_reload_preserve_filters() {
     }
     assert!(!loading_screen.contains("New session in this directory"));
     assert!(app.poll());
-    assert!(
-        matches!(&app.modal, Some(Modal::Sessions { options: loaded, input, control: 1, selection: 0, .. }) if *loaded == options && input.lines() == ["find"])
-    );
+    assert!(matches!(
+        &app.modal,
+        Some(Modal::Sessions {
+            filters: SessionFilters {
+                options: loaded,
+                input,
+                control: 1
+            },
+            selection: 0,
+            ..
+        }) if *loaded == options && input.lines() == ["find"]
+    ));
     draw(&mut app, &mut terminal);
     let screen: String = terminal
         .backend()
@@ -3452,11 +3502,13 @@ fn session_picker_scroll_margin_and_wheel_preserve_selection() {
                 ..Default::default()
             })
             .collect(),
-        input: Default::default(),
+        filters: SessionFilters {
+            input: Default::default(),
+            options: Default::default(),
+            control: 0,
+        },
         selection: 0,
         search: false,
-        options: Default::default(),
-        control: 0,
         offset: 0,
         manual_scroll: false,
         area: Default::default(),
@@ -3570,16 +3622,24 @@ fn session_picker_scroll_margin_and_wheel_preserve_selection() {
         modifiers: M::NONE,
     }))
     .unwrap();
-    assert!(
-        matches!(&app.modal, Some(Modal::Sessions { options, control: 2, search: false, input, .. })
-        if options.created && input.lines() == ["Session 49"])
-    );
+    assert!(matches!(
+        &app.modal,
+        Some(Modal::Sessions {
+            filters: SessionFilters {
+                options,
+                control: 2,
+                input
+            },
+            search: false,
+            ..
+        }) if options.created && input.lines() == ["Session 49"]
+    ));
     // Clicking the selected value again must not toggle, reset selection, or reload.
     draw(&mut app, &mut terminal);
     for control in 0..3 {
         let Some(Modal::Sessions {
             filter_areas,
-            options,
+            filters: SessionFilters { options, .. },
             ..
         }) = &app.modal
         else {
@@ -3594,9 +3654,13 @@ fn session_picker_scroll_margin_and_wheel_preserve_selection() {
             modifiers: M::NONE,
         }))
         .unwrap();
-        assert!(
-            matches!(&app.modal, Some(Modal::Sessions { options, .. }) if !options.all && !options.archived && options.created)
-        );
+        assert!(matches!(
+            &app.modal,
+            Some(Modal::Sessions {
+                filters: SessionFilters { options, .. },
+                ..
+            }) if !options.all && !options.archived && options.created
+        ));
         draw(&mut app, &mut terminal);
     }
     terminal.backend_mut().resize(120, 8);
@@ -4186,11 +4250,13 @@ fn input_cursor_tracks_japanese_text_and_is_hidden_outside_editing() {
     assert!(!terminal.backend().cursor_visible());
     app.modal = Some(Modal::Sessions {
         items: Vec::new(),
-        input: Default::default(),
+        filters: SessionFilters {
+            input: Default::default(),
+            options: Default::default(),
+            control: 0,
+        },
         selection: 0,
         search: false,
-        options: Default::default(),
-        control: 0,
         offset: 0,
         manual_scroll: false,
         area: Default::default(),

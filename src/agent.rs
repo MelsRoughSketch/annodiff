@@ -22,6 +22,10 @@ pub struct SessionOptions {
     pub created: bool,
 }
 impl SessionOptions {
+    pub fn matching(self, items: &[Session], query: String) -> impl Iterator<Item = &Session> {
+        items.iter().filter(move |s| s.matches(!self.all, &query))
+    }
+
     pub fn sort(&self, items: &mut [Session]) {
         items.sort_by_key(|s| {
             std::cmp::Reverse(if self.created {

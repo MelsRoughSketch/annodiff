@@ -1,5 +1,5 @@
 use crate::{
-    app::{App, Confirmation, FileRow, Inspection, Modal},
+    app::{App, Confirmation, FileRow, Inspection, Modal, SessionFilters},
     diff::{FileView, Row},
     palette,
     review::File,
@@ -926,43 +926,33 @@ fn draw_modal(
         }
         Modal::Sessions { .. } | Modal::Loading { .. } => {
             let mut loading_selection = 0;
-            let (items, input, selection, search, options, control, viewport) = match modal {
+            let (items, filters, selection, search, viewport) = match modal {
                 Modal::Sessions {
                     offset,
                     manual_scroll,
                     area,
                     filter_areas,
                     items,
-                    input,
+                    filters,
                     selection,
                     search,
-                    options,
-                    control,
                 } => (
                     items.as_slice(),
-                    input,
+                    filters,
                     selection,
                     *search,
-                    options,
-                    control,
                     Some((offset, manual_scroll, area, filter_areas)),
                 ),
-                Modal::Loading {
-                    input,
-                    options,
-                    control,
-                    ..
-                } => (
-                    &[][..],
-                    input,
-                    &mut loading_selection,
-                    false,
-                    options,
-                    control,
-                    None,
-                ),
+                Modal::Loading { filters, .. } => {
+                    (&[][..], filters, &mut loading_selection, false, None)
+                }
                 _ => unreachable!(),
             };
+            let SessionFilters {
+                input,
+                options,
+                control,
+            } = filters;
             let loading = viewport.is_none();
             frame.render_widget(Clear, area);
             let query = input.lines().join(" ").to_lowercase();
@@ -970,19 +960,14 @@ fn draw_modal(
                 "+ New session in this directory".into(),
                 "Copy to clipboard".into(),
             ];
-            labels.extend(
-                items
-                    .iter()
-                    .filter(|s| s.matches(!options.all, &query))
-                    .map(|s| {
-                        format!(
-                            "{}{} · {}",
-                            if s.current { "[here] " } else { "" },
-                            s.title().split_whitespace().collect::<Vec<_>>().join(" "),
-                            s.cwd
-                        )
-                    }),
-            );
+            labels.extend(options.matching(items, query).map(|s| {
+                format!(
+                    "{}{} · {}",
+                    if s.current { "[here] " } else { "" },
+                    s.title().split_whitespace().collect::<Vec<_>>().join(" "),
+                    s.cwd
+                )
+            }));
             *selection = (*selection).min(labels.len().saturating_sub(1));
             let search_area = Rect::new(area.x, area.y, area.width, 3.min(area.height));
             input.set_block(block(" Search Codex sessions ", search));
@@ -1003,14 +988,38 @@ fn draw_modal(
             } else {
                 format!("{} sessions ", labels.len().saturating_sub(2))
             };
+            let filter_parts: Vec<_> = filters
+                .iter()
+                .enumerate()
+                .map(|(i, (name, values, second))| {
+                    let focused = !search && *control == i;
+                    let mut label = format!("{}{name}: ", if focused { ">" } else { "" });
+                    let mut ranges = [(0, 0); 2];
+                    for (side, value) in values.iter().enumerate() {
+                        if side > 0 {
+                            label.push_str(" / ");
+                        }
+                        let value = if *second == (side == 1) {
+                            format!("[{value}]")
+                        } else {
+                            (*value).into()
+                        };
+                        ranges[side] = (label.width() as u16, value.width() as u16);
+                        label.push_str(&value);
+                    }
+                    let style = if focused {
+                        selected()
+                    } else {
+                        Style::default()
+                    };
+                    (Span::styled(label, style), ranges)
+                })
+                .collect();
             let title_width = " Destination · ".width()
                 + summary.width()
-                + usize::from(!search)
-                + filters
+                + filter_parts
                     .iter()
-                    .map(|(name, values, _)| {
-                        name.width() + 2 + values[0].width() + values[1].width() + 5 + " · ".width()
-                    })
+                    .map(|(label, _)| label.width() + " · ".width())
                     .sum::<usize>();
             let stacked_filters = title_width + 2 > list_area.width as usize;
             let mut title = vec![Span::raw(" Destination · ")];
@@ -1021,38 +1030,18 @@ fn draw_modal(
             let mut x = list_area
                 .x
                 .saturating_add(1 + " Destination · ".width() as u16);
-            for (i, (name, values, second)) in filters.iter().enumerate() {
+            for (i, (span, ranges)) in filter_parts.into_iter().enumerate() {
                 let y = if stacked_filters {
                     x = hit_bounds.x;
                     hit_bounds.y.saturating_add(i as u16)
                 } else {
                     list_area.y
                 };
-                let focused = !search && *control == i;
-                let mut label = format!("{}{name}: ", if focused { ">" } else { "" });
-                for (side, value) in values.iter().enumerate() {
-                    if side > 0 {
-                        label.push_str(" / ");
-                    }
-                    let value = if *second == (side == 1) {
-                        format!("[{value}]")
-                    } else {
-                        (*value).into()
-                    };
-                    let start = x.saturating_add(label.width() as u16);
+                for (side, (start, width)) in ranges.into_iter().enumerate() {
                     filter_areas[i][side] =
-                        Rect::new(start, y, value.width() as u16, 1).intersection(hit_bounds);
-                    label.push_str(&value);
+                        Rect::new(x.saturating_add(start), y, width, 1).intersection(hit_bounds);
                 }
-                x = x.saturating_add(label.width() as u16 + " · ".width() as u16);
-                let span = Span::styled(
-                    label,
-                    if focused {
-                        selected()
-                    } else {
-                        Style::default()
-                    },
-                );
+                x = x.saturating_add(span.width() as u16 + " · ".width() as u16);
                 if stacked_filters {
                     filter_labels.push(span);
                 } else {
