@@ -3788,11 +3788,11 @@ fn file_tree_compacts_single_directory_chains_and_preserves_folds() {
         Leaf(5),
     ];
     assert_eq!(app.tree_rows, expanded);
-    assert_eq!(app.labels[1][0].to_string(), "▼ aaa/bbb/ccc/");
+    assert_eq!(app.labels[1][0].to_string(), "▼  aaa/bbb/ccc/");
     assert!(app.labels[1][1].to_string().starts_with("     target.rs"));
-    assert_eq!(app.labels[1][3].to_string(), "  ▼ left/deep/");
-    assert_eq!(app.labels[1][8].to_string(), "  ▼ child/deep/");
-    assert_eq!(app.labels[1][11].to_string(), "▼ 日本語/中間/奥/");
+    assert_eq!(app.labels[1][3].to_string(), "  ▼  left/deep/");
+    assert_eq!(app.labels[1][8].to_string(), "  ▼  child/deep/");
+    assert_eq!(app.labels[1][11].to_string(), "▼  日本語/中間/奥/");
 
     app.move_selection(0, Some(0));
     press(&mut app, K::Enter);
@@ -3800,7 +3800,7 @@ fn file_tree_compacts_single_directory_chains_and_preserves_folds() {
         app.tree_rows[app.cursor[1]],
         Directory("aaa/bbb/ccc".into())
     );
-    assert_eq!(app.labels[1][0].to_string(), "▶ aaa/bbb/ccc/");
+    assert_eq!(app.labels[1][0].to_string(), "▶  aaa/bbb/ccc/");
     assert!(!app.tree_rows.contains(&Leaf(0)));
     app.filter(1, "TARGET".into());
     assert_eq!(app.tree_rows, [Directory("aaa/bbb/ccc".into()), Leaf(0)]);
@@ -3821,7 +3821,7 @@ fn file_tree_compacts_single_directory_chains_and_preserves_folds() {
     });
     app.apply(next).unwrap();
     assert_eq!(app.tree_rows[0], Directory("aaa/bbb".into()));
-    assert_eq!(app.labels[1][1].to_string(), "  ▼ ccc/");
+    assert_eq!(app.labels[1][1].to_string(), "  ▼  ccc/");
     app.move_selection(0, Some(0));
     press(&mut app, K::Enter);
     let mut next = app.review.clone();
@@ -3831,7 +3831,7 @@ fn file_tree_compacts_single_directory_chains_and_preserves_folds() {
         app.tree_rows[app.cursor[1]],
         Directory("aaa/bbb/ccc".into())
     );
-    assert_eq!(app.labels[1][0].to_string(), "▶ aaa/bbb/ccc/");
+    assert_eq!(app.labels[1][0].to_string(), "▶  aaa/bbb/ccc/");
     press(&mut app, K::Enter);
     assert_eq!(app.tree_rows, expanded);
 
@@ -3846,7 +3846,7 @@ fn file_tree_compacts_single_directory_chains_and_preserves_folds() {
     assert_eq!(app.tree_rows[0], Directory("aaa".into()));
     assert_eq!(app.tree_rows[1], Leaf(6));
     assert_eq!(app.tree_rows[2], Directory("aaa/bbb/ccc".into()));
-    assert_eq!(app.labels[1][2].to_string(), "  ▼ bbb/ccc/");
+    assert_eq!(app.labels[1][2].to_string(), "  ▼  bbb/ccc/");
 }
 
 #[test]
@@ -3875,7 +3875,12 @@ fn file_tree_navigation_filters_mouse_and_layout() {
     let mut app = App::new(
         Review {
             files,
-            statuses: [("src/nested/mod.rs".into(), " M".into())].into(),
+            statuses: [
+                ("README.md".into(), "??".into()),
+                ("src/lib.rs".into(), "M".into()),
+                ("src/nested/mod.rs".into(), " M".into()),
+            ]
+            .into(),
             ..Default::default()
         },
         dir.path().join("state.json"),
@@ -3895,6 +3900,17 @@ fn file_tree_navigation_filters_mouse_and_layout() {
     assert!(app.labels[1][4].to_string().contains("M mod.rs · 1 open"));
     let mut terminal = Terminal::new(TestBackend::new(120, 36)).unwrap();
     draw(&mut app, &mut terminal);
+    let name_column = |terminal: &Terminal<TestBackend>, row, first| {
+        (0..terminal.backend().buffer().area.width)
+            .find(|&x| terminal.backend().buffer()[(x, row)].symbol() == first)
+            .unwrap()
+    };
+    let y = app.pane_rects[1].y + 1;
+    let root_column = name_column(&terminal, y, "R");
+    let child_column = name_column(&terminal, y + 2, "l");
+    assert_eq!(name_column(&terminal, y + 1, "s"), root_column);
+    assert_eq!(name_column(&terminal, y + 3, "n"), child_column);
+    assert_eq!(child_column, root_column + 2);
     app.move_selection(0, Some(4));
     assert_eq!(app.current().unwrap().path, "src/nested/mod.rs");
     assert_eq!(app.refs.len(), 1);
@@ -3933,6 +3949,8 @@ fn file_tree_navigation_filters_mouse_and_layout() {
     );
     app.rebuild_lists();
     assert_eq!(app.cursor[1], 1);
+    draw(&mut app, &mut terminal);
+    assert_eq!(name_column(&terminal, y + 1, "s"), root_column);
     // Search reveals the complete ancestor chain without losing either fold.
     app.filter(1, "SRC/NESTED".into());
     assert_eq!(app.tree_rows[app.cursor[1]], Leaf(2));

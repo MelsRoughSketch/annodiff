@@ -614,7 +614,7 @@ impl App {
                 if directories.insert(path.to_owned()) {
                     self.tree_rows.push(FileRow::Directory(path.to_owned()));
                     self.labels[1].push(Line::from(format!(
-                        "{}{} {}/",
+                        "{}{}  {}/",
                         "  ".repeat(depth),
                         if !filtered && self.collapsed_dirs.contains(path) {
                             "▶"
