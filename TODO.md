@@ -27,15 +27,16 @@ branch until it is merged.
 
 ## 2. List construction and input handling
 
-- [ ] Separate file-list construction from rebuilding all sidebar lists.
+- [x] Separate file-list construction from rebuilding all sidebar lists.
   `App::rebuild_lists` currently also rebuilds comments and commits. Keep file
   filtering, compact directory chains, folds, and selection restoration together.
   Check callers before reducing which lists an operation rebuilds.
 - [ ] Keep each list's display rows and source-item mapping together in its
   construction path. Preserve working-tree rows, filtered commit selection,
   history references, and file selection through filter/fold changes.
-- [ ] Split `App::handle` into focused mouse, editor, modal, and key handlers.
-  Share actual actions where mouse handling currently synthesizes key events.
+- [x] Split `App::handle` into focused mouse, editor, modal, and key handlers.
+  Share sidebar activation directly between mouse and keyboard handling.
+  Session-picker key synthesis remains part of the next step.
   Preserve event ordering, press/release semantics, and pending clicks during drags.
 
 ## 3. Session picker state
