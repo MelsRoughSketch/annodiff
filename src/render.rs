@@ -268,6 +268,18 @@ pub fn draw(app: &mut App, frame: &mut Frame) {
             Paragraph::new(app.status.as_str()),
             Rect::new(area.x, area.bottom() - 2, area.width, 1),
         );
+        let version = concat!("annodiff v", env!("CARGO_PKG_VERSION"));
+        if app.status.width() + 1 + version.len() <= area.width as usize {
+            frame.render_widget(
+                Paragraph::new(version).style(Style::default().fg(palette::MUTED)),
+                Rect::new(
+                    area.right() - version.len() as u16,
+                    area.bottom() - 2,
+                    version.len() as u16,
+                    1,
+                ),
+            );
+        }
     }
     let hint = if app.editor.is_some() {
         "Enter: newline · Ctrl+Enter/F2: save · Esc: cancel"
