@@ -329,7 +329,11 @@ pub fn session_loaded_at(path: &Path, id: &str) -> Result<bool> {
     let (mut socket, _) = tungstenite::client("ws://localhost/", stream)
         .map_err(|e| anyhow::anyhow!("daemon WebSocket: {e}"))?;
     let deadline = Instant::now() + Duration::from_secs(5);
-    let mut call = |request_id, method: &str, params: Value| -> Result<Value> {
+    let call = |socket: &mut tungstenite::WebSocket<UnixStream>,
+                request_id,
+                method: &str,
+                params: Value|
+     -> Result<Value> {
         socket.send(tungstenite::Message::Text(
             json!({"id":request_id,"method":method,"params":params})
                 .to_string()
@@ -354,38 +358,23 @@ pub fn session_loaded_at(path: &Path, id: &str) -> Result<bool> {
             }
         }
     };
-    call(1, "initialize", initialize())?;
-    // End the closure borrow to send the notification between requests.
+    call(&mut socket, 1, "initialize", initialize())?;
     socket.send(tungstenite::Message::Text(
         json!({"method":"initialized"}).to_string().into(),
     ))?;
-    socket.send(tungstenite::Message::Text(
-        json!({"id":2,"method":"thread/read","params":{"threadId":id,"includeTurns":false}})
-            .to_string()
-            .into(),
-    ))?;
-    loop {
-        socket.get_ref().set_read_timeout(Some(
-            deadline
-                .checked_duration_since(Instant::now())
-                .context("Codex daemon request timed out")?,
-        ))?;
-        let message = socket.read()?;
-        if message.is_close() {
-            bail!("Codex daemon closed the connection")
-        }
-        if !(message.is_text() || message.is_binary()) {
-            continue;
-        }
-        if let Some(result) = response(serde_json::from_slice(message.into_data().as_ref())?, 2)? {
-            return match result["thread"]["status"]["type"].as_str() {
-                Some("notLoaded") => Ok(false),
-                Some("idle" | "active" | "systemError") => Ok(true),
-                other => bail!("unknown Codex session status: {other:?}"),
-            };
-        }
+    let result = call(
+        &mut socket,
+        2,
+        "thread/read",
+        json!({"threadId":id,"includeTurns":false}),
+    )?;
+    match result["thread"]["status"]["type"].as_str() {
+        Some("notLoaded") => Ok(false),
+        Some("idle" | "active" | "systemError") => Ok(true),
+        other => bail!("unknown Codex session status: {other:?}"),
     }
 }
+
 pub fn command(root: &str, id: &str, prompt: &str, queued: bool) -> Command {
     let mut command = Command::new("codex");
     if id.is_empty() {

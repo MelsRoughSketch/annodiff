@@ -623,7 +623,7 @@ impl FileView {
                     .unwrap_or_else(|| SYNTAXES.find_syntax_plain_text());
                 (
                     self.hunks[hunk].start,
-                    HighlightLines::new(syntax, &THEMES.themes["base16-ocean.dark"]),
+                    HighlightLines::new(syntax, &THEMES.themes[crate::palette::SYNTAX_THEME]),
                 )
             });
             for i in *next..end {

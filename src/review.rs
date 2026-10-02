@@ -10,6 +10,21 @@ use std::{
     process::{Command, Output},
 };
 
+const PATCH_ARGS: &[&str] = &[
+    "-c",
+    "core.quotePath=false",
+    "-c",
+    "diff.suppressBlankEmpty=false",
+    "diff",
+    "--no-color",
+    "--no-ext-diff",
+    "--no-textconv",
+    "--no-renames",
+    "--output-indicator-new=+",
+    "--output-indicator-old=-",
+    "--output-indicator-context= ",
+];
+
 fn null_default<'de, D: Deserializer<'de>, T: Deserialize<'de> + Default>(
     d: D,
 ) -> std::result::Result<T, D::Error> {
@@ -568,26 +583,15 @@ pub fn expand_file(review: &Review, file: &File) -> Result<File> {
         !review.base.starts_with('-') && !review.target.starts_with('-'),
         "invalid revision"
     );
-    let mut args = vec![
-        "-c",
-        "core.quotePath=false",
-        "-c",
-        "diff.suppressBlankEmpty=false",
-        "diff",
-        "--no-color",
-        "--no-ext-diff",
-        "--no-textconv",
-        "--no-renames",
-        "--output-indicator-new=+",
-        "--output-indicator-old=-",
-        "--output-indicator-context= ",
+    let mut args = PATCH_ARGS.to_vec();
+    args.extend([
         "--unified=2147483647",
         if review.base.is_empty() {
             "HEAD"
         } else {
             &review.base
         },
-    ];
+    ]);
     if !review.target.is_empty() {
         args.push(&review.target);
     }
@@ -701,20 +705,7 @@ pub fn snapshot(root: &str, base: &str, target: &str) -> Result<Review> {
         String::new()
     };
     let untracked_set: HashSet<_> = untracked.split('\0').collect();
-    let diff_args = vec![
-        "-c",
-        "core.quotePath=false",
-        "-c",
-        "diff.suppressBlankEmpty=false",
-        "diff",
-        "--no-color",
-        "--no-ext-diff",
-        "--no-textconv",
-        "--no-renames",
-        "--output-indicator-new=+",
-        "--output-indicator-old=-",
-        "--output-indicator-context= ",
-    ];
+    let diff_args = PATCH_ARGS.to_vec();
     // Read names and patches in the same Git invocation so concurrent edits or
     // custom Git ordering cannot associate a patch with the wrong file.
     let mut patches = HashMap::new();
