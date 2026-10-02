@@ -154,7 +154,10 @@ fn diff_parse_alignment_wrapping_and_comments() {
                 for row in 0..view.len() {
                     let (logical, part) = view.locate(row).unwrap();
                     assert_eq!(view.starts[logical] + part, row);
+                    assert_eq!(view.visual_at(logical, part), Some(row));
                 }
+                assert_eq!(view.visual_at(view.rows.len(), 0), None);
+                assert_eq!(view.visual_at(usize::MAX, 0), None);
             }
         }
     }
