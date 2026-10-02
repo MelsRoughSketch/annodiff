@@ -1850,6 +1850,110 @@ fn sidebar_selection_uses_moving_marker_without_overriding_text_colors() {
 }
 
 #[test]
+fn wrapping_toggle_preserves_scrolled_viewport_and_cursor_source() {
+    use crossterm::event::{MouseEvent, MouseEventKind};
+    let dir = tempfile::tempdir().unwrap();
+    let patch = format!(
+        "@@ -1,100 +1,100 @@\n{}",
+        (1..=100)
+            .map(|i| format!(" line {i}: {}\n", "long 日本語 text ".repeat(15)))
+            .collect::<String>()
+    );
+    let mut f = file(&patch);
+    f.comments.push(Comment {
+        start: 5,
+        end: 6,
+        text: "existing comment ".repeat(20),
+        ..Default::default()
+    });
+    for (split, side) in [(false, 0), (true, 0), (true, 1)] {
+        for cursor_source in [2, 80] {
+            let mut app = App::new(
+                Review {
+                    files: vec![f.clone()],
+                    split,
+                    ..Default::default()
+                },
+                dir.path().join("state.json"),
+            );
+            app.focus(0);
+            app.side = side;
+            let mut terminal = Terminal::new(TestBackend::new(100, 20)).unwrap();
+            draw(&mut app, &mut terminal);
+            let cursor = app
+                .view()
+                .unwrap()
+                .visual_for_source(cursor_source, side)
+                .unwrap();
+            app.move_selection(1, Some(cursor));
+            draw(&mut app, &mut terminal);
+            let wheel = Event::Mouse(MouseEvent {
+                kind: if cursor_source == 2 {
+                    MouseEventKind::ScrollDown
+                } else {
+                    MouseEventKind::ScrollUp
+                },
+                column: app.diff_inner.x + 1,
+                row: app.diff_inner.y + 1,
+                modifiers: M::NONE,
+            });
+            for _ in 0..10 {
+                app.handle(wheel.clone()).unwrap();
+            }
+            draw(&mut app, &mut terminal);
+            assert!(cursor < app.offset || cursor >= app.offset + app.diff_inner.height as usize);
+            for toggle in 0..4 {
+                let top = app.view().unwrap().locate(app.offset).unwrap();
+                // Wrapping also works when invoked from the Files pane.
+                app.focus(toggle % 2);
+                press(&mut app, K::Char('f'));
+                draw(&mut app, &mut terminal);
+                let view = app.view().unwrap();
+                assert!(app.manual_scroll[0]);
+                assert_eq!(view.wrap, toggle % 2 == 0);
+                assert_eq!(view.locate(app.offset).unwrap().0, top.0);
+                assert_eq!(app.offset, view.visual_at(top.0, top.1).unwrap());
+                assert_eq!(view.source(app.cursor[0], side), Some(cursor_source));
+                assert_eq!(app.review.files[0].comments, f.comments);
+                let offset = app.offset;
+                draw(&mut app, &mut terminal);
+                assert_eq!(app.offset, offset);
+                if toggle == 0 {
+                    app.handle(wheel.clone()).unwrap();
+                    draw(&mut app, &mut terminal);
+                }
+            }
+            // Near EOF, clamp the mapped row to the available scroll range.
+            app.offset = app.view().unwrap().len() - app.diff_inner.height as usize;
+            for _ in 0..2 {
+                let top = app.view().unwrap().locate(app.offset).unwrap();
+                press(&mut app, K::Char('f'));
+                draw(&mut app, &mut terminal);
+                let view = app.view().unwrap();
+                assert_eq!(
+                    app.offset,
+                    view.visual_at(top.0, top.1)
+                        .unwrap()
+                        .min(view.len() - app.diff_inner.height as usize)
+                );
+                assert!(app.manual_scroll[0]);
+                assert_eq!(view.source(app.cursor[0], side), Some(cursor_source));
+            }
+            press(&mut app, K::Down);
+            draw(&mut app, &mut terminal);
+            assert!(!app.manual_scroll[0]);
+            assert!(
+                (app.offset..app.offset + app.diff_inner.height as usize).contains(&app.cursor[0])
+            );
+            let source = app.view().unwrap().source(app.cursor[0], side).unwrap();
+            app.start_edit(None, false).unwrap();
+            let comment = &app.editor.as_ref().unwrap().comment;
+            assert_eq!((comment.start, comment.end), (source, source));
+        }
+    }
+}
+
+#[test]
 fn mouse_scroll_moves_viewport_without_changing_selection() {
     use crossterm::event::{MouseEvent, MouseEventKind};
     let dir = tempfile::tempdir().unwrap();

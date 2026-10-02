@@ -454,6 +454,10 @@ impl App {
         self.ensure_view();
         let (wrap, bias, selection) = (self.wrap, self.bias, self.cursor[0]);
         let anchor = self.view().and_then(|v| v.locate(selection));
+        let viewport_anchor = self
+            .view()
+            .filter(|v| self.manual_scroll[0] && v.wrap != wrap)
+            .and_then(|v| v.locate(self.offset));
         let range_anchors = [self.anchor, self.drag_start].map(|anchor| {
             anchor.and_then(|(visual, side)| Some((self.view()?.locate(visual)?, side)))
         });
@@ -466,6 +470,11 @@ impl App {
         }
         if let Some(visual) = anchor.and_then(|(row, part)| self.view()?.visual_at(row, part)) {
             self.cursor[0] = visual;
+        }
+        if let Some(visual) =
+            viewport_anchor.and_then(|(row, part)| self.view()?.visual_at(row, part))
+        {
+            self.offset = visual;
         }
         if let Some(view) = self.view() {
             let cursor = self.cursor[0].min(view.len().saturating_sub(1));
@@ -1845,7 +1854,9 @@ impl App {
             }
             _ => {}
         }
-        self.manual_scroll[self.pane] = false;
+        if key.code != K::Char('f') {
+            self.manual_scroll[self.pane] = false;
+        }
         let code = match key.code {
             K::Char('j') => K::Down,
             K::Char('k') => K::Up,
