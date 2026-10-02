@@ -264,9 +264,10 @@ pub fn draw(app: &mut App, frame: &mut Frame) {
         draw_modal(frame, main, modal, &app.review, help, &app.language);
     }
     if area.height >= 2 {
+        let status_y = area.bottom() - 2;
         frame.render_widget(
             Paragraph::new(app.status.as_str()),
-            Rect::new(area.x, area.bottom() - 2, area.width, 1),
+            Rect::new(area.x, status_y, area.width, 1),
         );
         let version = concat!("annodiff v", env!("CARGO_PKG_VERSION"));
         if app.status.width() + 1 + version.len() <= area.width as usize {
@@ -274,7 +275,7 @@ pub fn draw(app: &mut App, frame: &mut Frame) {
                 Paragraph::new(version).style(Style::default().fg(palette::MUTED)),
                 Rect::new(
                     area.right() - version.len() as u16,
-                    area.bottom() - 2,
+                    status_y,
                     version.len() as u16,
                     1,
                 ),
