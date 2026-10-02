@@ -102,6 +102,66 @@ fn saved_json_null_fields_validation_and_history() {
 }
 
 #[test]
+fn tui_version_uses_build_version_without_overlapping_status_or_hints() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut app = App::new(
+        Review {
+            files: vec![fixture()],
+            ..Default::default()
+        },
+        dir.path().join("state.json"),
+    );
+    let version = format!("annodiff v{}", env!("CARGO_PKG_VERSION"));
+    let unicode_boundary = 7 + version.len() as u16;
+    for (width, height, status, visible) in [
+        (120, 24, "Ready", true),
+        (40, 10, "Ready", true),
+        (unicode_boundary, 4, "日本語", true),
+        (unicode_boundary - 1, 4, "日本語", false),
+        (10, 4, "Ready", false),
+        (
+            40,
+            10,
+            "A long status message should remain readable",
+            false,
+        ),
+        (40, 1, "Ready", false),
+    ] {
+        app.status = status.into();
+        let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
+        draw(&mut app, &mut terminal);
+        let buffer = terminal.backend().buffer();
+        let row = |y| {
+            (0..width)
+                .map(|x| buffer[(x, y)].symbol())
+                .collect::<String>()
+        };
+        if height >= 2 {
+            let footer = row(height - 2);
+            assert_eq!(footer.ends_with(&version), visible);
+            assert!(!footer.contains("annodiff") || visible);
+            assert_eq!(
+                buffer[(0, height - 2)].symbol(),
+                status.chars().next().unwrap().to_string()
+            );
+            if !visible && status.is_ascii() {
+                assert!(footer.starts_with(&status[..status.len().min(width as usize)]));
+            }
+        }
+        assert!(row(height - 1).starts_with("?: help"));
+        assert!(!row(height - 1).contains("annodiff"));
+    }
+    let mut terminal = Terminal::new(TestBackend::new(120, 24)).unwrap();
+    app.status = "Ready".into();
+    press(&mut app, K::Char('?'));
+    draw(&mut app, &mut terminal);
+    let footer: String = (0..120)
+        .map(|x| terminal.backend().buffer()[(x, 22)].symbol())
+        .collect();
+    assert!(footer.ends_with(&version));
+}
+
+#[test]
 fn diff_parse_alignment_wrapping_and_comments() {
     let mut f = fixture();
     assert_eq!((f.lines[7].old, f.lines[7].new), (0, 2));
