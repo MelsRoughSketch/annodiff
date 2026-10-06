@@ -30,6 +30,8 @@ cargo build --release --locked
 
 Browse files and commits, select lines, and add comments. Preview reviews before sending or copying them. Press `?` for key bindings.
 
+Click an `unchanged lines omitted` row to reveal up to 10 lines in that section. Use `z` to expand context near the cursor and `Z` to show the full file or collapse expanded context. Additional context is read-only.
+
 The Files pane groups files in a directory tree, combining chains of directories into paths such as `aaa/bbb/ccc/` when each intermediate directory has only one child directory and no changed files directly inside it. Use Up/Down or j/k to navigate and `-` to collapse and `=` to expand directories (Enter or Space toggles them). Clicking a directory selects it without changing its expansion state. Use `+` / `_` to expand/shrink panes. Path search (`/`) and comment filters (`o`, `u`) reveal matching files inside collapsed directories; clearing the filters restores your folds.
 
 - [Configuration](config.example.toml)
