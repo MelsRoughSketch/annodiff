@@ -463,7 +463,7 @@ fn draw_diff(app: &mut App, frame: &mut Frame) {
             Row::Gap(label) => {
                 if label {
                     frame.render_widget(
-                        Paragraph::new("⋯ unchanged lines omitted · z: expand nearby ⋯")
+                        Paragraph::new("⋯ unchanged lines omitted · click to expand ⋯")
                             .style(Style::default().fg(palette::MUTED)),
                         area,
                     );

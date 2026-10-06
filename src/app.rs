@@ -388,15 +388,44 @@ impl App {
             self.status = "All context is already visible · Z: collapse".into();
             return Ok(());
         }
-        let display = view
-            .expanded
-            .as_ref()
-            .and_then(|_| view.display_source(self.cursor[0], self.side));
-        let source = view.source(self.cursor[0], self.side).or_else(|| {
-            (self.cursor[0]..view.len())
-                .chain((0..self.cursor[0]).rev())
-                .find_map(|row| view.source(row, self.side))
+        // A clicked gap expands from its preceding code row, or backwards from
+        // the first code row for leading context. Do not choose a different gap
+        // merely because it is closer to the cursor's source line.
+        let gap_edge = view.locate(self.cursor[0]).and_then(|(row, _)| {
+            if !matches!(view.rows[row], Row::Gap(true)) {
+                return None;
+            }
+            let code = |row: &Row| match row {
+                Row::Code(pair) => Some(*pair),
+                _ => None,
+            };
+            view.rows[..row]
+                .iter()
+                .rev()
+                .find_map(code)
+                .and_then(|pair| pair.into_iter().flatten().max())
+                .map(|i| (i, 1))
+                .or_else(|| {
+                    view.rows[row + 1..]
+                        .iter()
+                        .find_map(code)
+                        .and_then(|pair| pair.into_iter().flatten().min())
+                        .map(|i| (i, -1))
+                })
         });
+        let display = view.expanded.as_ref().and_then(|_| {
+            gap_edge
+                .map(|(i, _)| i)
+                .or_else(|| view.display_source(self.cursor[0], self.side))
+        });
+        let source = gap_edge
+            .and_then(|(i, _)| view.original_source(i))
+            .or_else(|| view.source(self.cursor[0], self.side))
+            .or_else(|| {
+                (self.cursor[0]..view.len())
+                    .chain((0..self.cursor[0]).rev())
+                    .find_map(|row| view.source(row, self.side))
+            });
         let anchor = self
             .anchor
             .and_then(|(row, side)| Some((view.source(row, side)?, side)));
@@ -414,16 +443,15 @@ impl App {
         let split = self.split();
         let view = &mut self.cache.iter_mut().find(|(i, _)| *i == file).unwrap().1;
         view.layout(self.diff_inner.width as usize, self.bias, self.wrap);
-        let mut display = if collapse { None } else { display }.or_else(|| {
-            source
-                .and_then(|i| view.visual_for_source(i, self.side))
-                .and_then(|row| view.display_source(row, self.side))
-        });
+        let mut display = if collapse { None } else { display }
+            .or_else(|| source.and_then(|i| view.display_for_source(i)));
         let previous_display = display;
         if full {
             view.context_visible = None;
         } else {
-            display = view.expand_near(display.unwrap_or(0)).or(display);
+            display = view
+                .expand_near(display.unwrap_or(0), gap_edge.map(|(_, step)| step))
+                .or(display);
         }
         view.rebuild_rows(&self.review.files[file], split);
         view.layout(self.diff_inner.width as usize, self.bias, self.wrap);
@@ -1690,6 +1718,20 @@ impl App {
             {
                 self.pane_drag = Some((position, self.sidebar_percent));
                 return Ok(Effect::None);
+            }
+            if self.diff_inner.contains((mouse.column, mouse.row).into()) {
+                let target = self.offset + usize::from(mouse.row - self.diff_inner.y);
+                if self.view().is_some_and(|v| {
+                    v.locate(target)
+                        .is_some_and(|(row, _)| matches!(v.rows[row], Row::Gap(true)))
+                }) {
+                    self.focus(0);
+                    self.cursor[0] = target;
+                    self.anchor = None;
+                    self.manual_scroll[0] = false;
+                    self.expand_context(false)?;
+                    return Ok(Effect::None);
+                }
             }
             if self.split()
                 && self.diff_inner.contains((mouse.column, mouse.row).into())
