@@ -387,11 +387,14 @@ fn draw_diff(app: &mut App, frame: &mut Frame) {
             .min((height / 2).max(3))
             .min(height)
     });
+    // Reserve one source row above and two below, plus the two blank padding rows.
+    let editor_padding = usize::from(app.editor.is_some() && height >= editor_height + 5);
+    let editor_total_height = editor_height + 2 * editor_padding;
     if let Some(editor) = &app.editor {
         app.offset = editor
             .after
             .saturating_add(1)
-            .saturating_sub(height.saturating_sub(editor_height + 2));
+            .saturating_sub(height.saturating_sub(editor_total_height + 2));
     } else {
         if !app.manual_scroll[0] && app.cursor[0] < app.offset {
             app.offset = app.cursor[0];
@@ -438,16 +441,16 @@ fn draw_diff(app: &mut App, frame: &mut Frame) {
     let bounds = app.bounds();
     let mut screen_row = 0;
     let mut visual = app.offset;
-    let mut editor_rect = Rect::default();
+    let mut editor_area = Rect::default();
     while screen_row < height {
         if app.editor.as_ref().is_some_and(|e| visual == e.after + 1) {
-            editor_rect = Rect::new(
+            editor_area = Rect::new(
                 inner.x,
                 inner.y + screen_row as u16,
                 inner.width,
-                editor_height.min(height - screen_row) as u16,
+                editor_total_height.min(height - screen_row) as u16,
             );
-            screen_row += editor_height;
+            screen_row += editor_total_height;
             if screen_row >= height {
                 break;
             }
@@ -651,12 +654,13 @@ fn draw_diff(app: &mut App, frame: &mut Frame) {
         visual += 1;
     }
     // A file-wide comment can also be edited when the diff has no source rows.
-    if app.editor.is_some() && editor_rect.height == 0 {
-        editor_rect = Rect::new(inner.x, inner.y, inner.width, editor_height as u16);
+    if app.editor.is_some() && editor_area.height == 0 {
+        editor_area = Rect::new(inner.x, inner.y, inner.width, editor_total_height as u16);
     }
+    let editor_rect = editor_area.inner(ratatui::layout::Margin::new(0, editor_padding as u16));
     app.editor_rect = editor_rect;
     if let Some(editor) = &mut app.editor {
-        frame.render_widget(Clear, editor_rect);
+        frame.render_widget(Clear, editor_area);
         editor.input.set_block(block(
             format!(
                 " {} comment · Ctrl+Enter/F2: save ",

@@ -1006,6 +1006,105 @@ fn git_snapshot_worktree_and_literal_names() {
 }
 
 #[test]
+fn comment_editor_spacing_preserves_context_and_shrinks_on_resize() {
+    use annodiff::app::CommentRef;
+    use ratatui::{backend::Backend, layout::Margin};
+    let dir = tempfile::tempdir().unwrap();
+    let patch = format!(
+        "@@ -1,100 +1,100 @@\n{}",
+        (1..=100)
+            .map(|i| format!(" source {i}\n"))
+            .collect::<String>()
+    );
+    for (split, side) in [(false, 0), (true, 0), (true, 1)] {
+        for empty in [false, true] {
+            let mut app = App::new(
+                Review {
+                    files: vec![file(if empty { "" } else { &patch })],
+                    split,
+                    ..Default::default()
+                },
+                dir.path().join("state.json"),
+            );
+            app.focus(0);
+            app.zoom = 2;
+            app.side = side;
+            let mut terminal = Terminal::new(TestBackend::new(100, 24)).unwrap();
+            draw(&mut app, &mut terminal);
+            if !empty {
+                let row = app.view().unwrap().visual_for_source(50, side).unwrap();
+                app.move_selection(1, Some(row));
+                draw(&mut app, &mut terminal);
+            }
+            for editing in [false, true] {
+                app.start_edit(
+                    editing.then_some(CommentRef {
+                        history: false,
+                        file: 0,
+                        comment: 0,
+                    }),
+                    empty,
+                )
+                .unwrap();
+                let selected = app.editor.as_ref().unwrap().comment.clone();
+                if !editing {
+                    app.handle(Event::Paste("日本語\nsecond\nlast".into()))
+                        .unwrap();
+                }
+                for (width, height, spaced) in [
+                    (100, 24, true),
+                    (40, 13, true),
+                    (40, 12, false),
+                    (40, 10, false),
+                    (40, 7, false),
+                    (100, 24, true),
+                ] {
+                    terminal.backend_mut().resize(width, height);
+                    draw(&mut app, &mut terminal);
+                    let rect = app.editor_rect;
+                    assert!(rect.height >= 3);
+                    assert_eq!(rect.intersection(app.diff_inner), rect);
+                    assert!(terminal.backend().cursor_visible());
+                    let cursor = terminal.backend_mut().get_cursor_position().unwrap();
+                    assert!(rect.inner(Margin::new(1, 1)).contains(cursor));
+                    assert_eq!(app.editor.as_ref().unwrap().comment, selected);
+                    let row = |y| {
+                        (app.diff_inner.x..app.diff_inner.right())
+                            .map(|x| terminal.backend().buffer()[(x, y)].symbol())
+                            .collect::<String>()
+                    };
+                    if spaced {
+                        assert!(rect.y > app.diff_inner.y);
+                        assert!(rect.bottom() < app.diff_inner.bottom());
+                        assert!(row(rect.y - 1).trim().is_empty());
+                        assert!(row(rect.bottom()).trim().is_empty());
+                        if !empty {
+                            assert!(row(rect.y - 2).contains("source 50"));
+                            assert!(!row(rect.bottom() + 1).trim().is_empty());
+                        }
+                    } else if !empty && height == 10 {
+                        assert!(row(rect.y - 1).contains("source 50"));
+                        assert!(!row(rect.bottom()).trim().is_empty());
+                    }
+                }
+                if editing {
+                    press(&mut app, K::Esc);
+                } else {
+                    press(&mut app, K::F(2));
+                }
+                draw(&mut app, &mut terminal);
+                assert!(app.editor.is_none());
+                assert!(!terminal.backend().cursor_visible());
+                let saved = Review::load(&app.state).unwrap();
+                assert_eq!(saved.files[0].comments[0].text, "日本語\nsecond\nlast");
+                assert_eq!(saved.files[0].comments[0].start, selected.start);
+                assert_eq!(saved.files[0].comments[0].end, selected.end);
+            }
+        }
+    }
+}
+
+#[test]
 fn workspace_input_edit_save_history_and_resize() {
     let temp = tempfile::tempdir().unwrap();
     let mut f = fixture();
