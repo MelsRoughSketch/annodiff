@@ -155,7 +155,7 @@ Include this file, `LICENSE-MIT`, and `LICENSE-APACHE` with binary distributions
 | ratatui-macros | 0.7.2 | MIT | MIT | [127](#notice-127) |
 | ratatui-termina | 0.1.0 | MIT | MIT | [126](#notice-126) |
 | ratatui-termwiz | 0.1.2 | MIT | MIT | [126](#notice-126) |
-| ratatui-textarea | 0.9.2 | MIT | MIT | [128](#notice-128) |
+| ratatui-textarea | 0.9.3 | MIT | MIT | [128](#notice-128) |
 | ratatui-widgets | 0.3.2 | MIT | MIT | [126](#notice-126) |
 | redox_syscall | 0.5.18 | MIT | MIT | [129](#notice-129) |
 | regex | 1.13.1 | MIT OR Apache-2.0 | MIT | [9](#notice-9), [18](#notice-18) |
@@ -8033,7 +8033,7 @@ SOFTWARE.
 
 ### Notice 128
 
-[ratatui-textarea@0.9.2](https://docs.rs/crate/ratatui-textarea/0.9.2/source/LICENSE.txt)
+[ratatui-textarea@0.9.3](https://docs.rs/crate/ratatui-textarea/0.9.3/source/LICENSE.txt)
 
 ````text
 the MIT License
