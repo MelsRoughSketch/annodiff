@@ -172,51 +172,51 @@ Include this file, `LICENSE-MIT`, and `LICENSE-APACHE` with binary distributions
 | serde_core | 1.0.229 | MIT OR Apache-2.0 | MIT | [7](#notice-7), [3](#notice-3) |
 | serde_derive | 1.0.229 | MIT OR Apache-2.0 | MIT | [7](#notice-7), [3](#notice-3) |
 | serde_json | 1.0.151 | MIT OR Apache-2.0 | MIT | [7](#notice-7), [3](#notice-3) |
-| serde_spanned | 1.1.1 | MIT OR Apache-2.0 | MIT | [37](#notice-37), [135](#notice-135) |
-| sha1 | 0.11.0 | MIT OR Apache-2.0 | MIT | [19](#notice-19), [136](#notice-136) |
-| sha2 | 0.10.9 | MIT OR Apache-2.0 | MIT | [19](#notice-19), [137](#notice-137) |
-| signal-hook | 0.3.18 | Apache-2.0/MIT | MIT | [9](#notice-9), [138](#notice-138) |
-| signal-hook-mio | 0.2.5 | MIT OR Apache-2.0 | MIT | [9](#notice-9), [138](#notice-138) |
-| signal-hook-registry | 1.4.8 | MIT OR Apache-2.0 | MIT | [9](#notice-9), [138](#notice-138) |
-| simd-adler32 | 0.3.10 | MIT | MIT | [139](#notice-139) |
-| siphasher | 1.0.4 | MIT OR Apache-2.0 | MIT | [140](#notice-140), [8](#notice-8), [141](#notice-141) |
-| slab | 0.4.12 | MIT | MIT | [142](#notice-142) |
-| smallvec | 1.16.2 | MIT OR Apache-2.0 | MIT | [9](#notice-9), [143](#notice-143) |
-| static_assertions | 1.1.0 | MIT OR Apache-2.0 | MIT | [8](#notice-8), [144](#notice-144) |
-| strsim | 0.11.1 | MIT | MIT | [145](#notice-145) |
-| strum | 0.28.0 | MIT | MIT | [146](#notice-146) |
-| strum_macros | 0.28.0 | MIT | MIT | [146](#notice-146) |
+| serde_spanned | 1.1.2 | MIT OR Apache-2.0 | MIT | [135](#notice-135), [136](#notice-136) |
+| sha1 | 0.11.0 | MIT OR Apache-2.0 | MIT | [19](#notice-19), [137](#notice-137) |
+| sha2 | 0.10.9 | MIT OR Apache-2.0 | MIT | [19](#notice-19), [138](#notice-138) |
+| signal-hook | 0.3.18 | Apache-2.0/MIT | MIT | [9](#notice-9), [139](#notice-139) |
+| signal-hook-mio | 0.2.5 | MIT OR Apache-2.0 | MIT | [9](#notice-9), [139](#notice-139) |
+| signal-hook-registry | 1.4.8 | MIT OR Apache-2.0 | MIT | [9](#notice-9), [139](#notice-139) |
+| simd-adler32 | 0.3.10 | MIT | MIT | [140](#notice-140) |
+| siphasher | 1.0.4 | MIT OR Apache-2.0 | MIT | [141](#notice-141), [8](#notice-8), [142](#notice-142) |
+| slab | 0.4.12 | MIT | MIT | [143](#notice-143) |
+| smallvec | 1.16.2 | MIT OR Apache-2.0 | MIT | [9](#notice-9), [144](#notice-144) |
+| static_assertions | 1.1.0 | MIT OR Apache-2.0 | MIT | [8](#notice-8), [145](#notice-145) |
+| strsim | 0.11.1 | MIT | MIT | [146](#notice-146) |
+| strum | 0.28.0 | MIT | MIT | [147](#notice-147) |
+| strum_macros | 0.28.0 | MIT | MIT | [147](#notice-147) |
 | syn | 1.0.109 | MIT OR Apache-2.0 | MIT | [9](#notice-9), [3](#notice-3) |
 | syn | 2.0.119 | MIT OR Apache-2.0 | MIT | [7](#notice-7), [3](#notice-3) |
 | syn | 3.0.6 | MIT OR Apache-2.0 | MIT | [7](#notice-7), [3](#notice-3) |
-| syntect | 5.3.0 | MIT | MIT | [147](#notice-147), [148](#notice-148), [149](#notice-149), [150](#notice-150), [151](#notice-151), [152](#notice-152), [153](#notice-153), [154](#notice-154), [155](#notice-155), [156](#notice-156), [157](#notice-157), [158](#notice-158) |
-| tempfile | 3.27.0 | MIT OR Apache-2.0 | MIT | [9](#notice-9), [159](#notice-159) |
-| termina | 0.3.3 | MIT OR MPL-2.0 | MIT | [160](#notice-160) |
-| terminfo | 0.9.0 | WTFPL | WTFPL | [161](#notice-161) |
-| termios | 0.3.3 | MIT | MIT | [162](#notice-162) |
+| syntect | 5.3.0 | MIT | MIT | [148](#notice-148), [149](#notice-149), [150](#notice-150), [151](#notice-151), [152](#notice-152), [153](#notice-153), [154](#notice-154), [155](#notice-155), [156](#notice-156), [157](#notice-157), [158](#notice-158), [159](#notice-159) |
+| tempfile | 3.27.0 | MIT OR Apache-2.0 | MIT | [9](#notice-9), [160](#notice-160) |
+| termina | 0.3.3 | MIT OR MPL-2.0 | MIT | [161](#notice-161) |
+| terminfo | 0.9.0 | WTFPL | WTFPL | [162](#notice-162) |
+| termios | 0.3.3 | MIT | MIT | [163](#notice-163) |
 | termwiz | 0.23.3 | MIT | MIT | [64](#notice-64) |
 | thiserror | 1.0.69 | MIT OR Apache-2.0 | MIT | [7](#notice-7), [3](#notice-3) |
 | thiserror | 2.0.21 | MIT OR Apache-2.0 | MIT | [7](#notice-7), [3](#notice-3) |
 | thiserror-impl | 1.0.69 | MIT OR Apache-2.0 | MIT | [7](#notice-7), [3](#notice-3) |
 | thiserror-impl | 2.0.21 | MIT OR Apache-2.0 | MIT | [7](#notice-7), [3](#notice-3) |
-| time | 0.3.55 | MIT OR Apache-2.0 | MIT | [102](#notice-102), [163](#notice-163) |
-| time-core | 0.1.9 | MIT OR Apache-2.0 | MIT | [102](#notice-102), [163](#notice-163) |
-| time-macros | 0.2.32 | MIT OR Apache-2.0 | MIT | [102](#notice-102), [163](#notice-163) |
-| toml | 1.1.6+spec-1.1.0 | MIT OR Apache-2.0 | MIT | [37](#notice-37), [135](#notice-135) |
-| toml_datetime | 1.1.1+spec-1.1.0 | MIT OR Apache-2.0 | MIT | [37](#notice-37), [135](#notice-135) |
-| toml_parser | 1.1.3+spec-1.1.0 | MIT OR Apache-2.0 | MIT | [37](#notice-37), [135](#notice-135) |
-| toml_writer | 1.1.2+spec-1.1.0 | MIT OR Apache-2.0 | MIT | [37](#notice-37), [135](#notice-135) |
-| tungstenite | 0.30.0 | MIT OR Apache-2.0 | MIT | [9](#notice-9), [164](#notice-164) |
-| typenum | 1.20.1 | MIT OR Apache-2.0 | MIT | [165](#notice-165), [166](#notice-166), [167](#notice-167) |
+| time | 0.3.55 | MIT OR Apache-2.0 | MIT | [102](#notice-102), [164](#notice-164) |
+| time-core | 0.1.9 | MIT OR Apache-2.0 | MIT | [102](#notice-102), [164](#notice-164) |
+| time-macros | 0.2.32 | MIT OR Apache-2.0 | MIT | [102](#notice-102), [164](#notice-164) |
+| toml | 1.1.8+spec-1.1.0 | MIT OR Apache-2.0 | MIT | [135](#notice-135), [136](#notice-136) |
+| toml_datetime | 1.1.2+spec-1.1.0 | MIT OR Apache-2.0 | MIT | [135](#notice-135), [136](#notice-136) |
+| toml_parser | 1.1.5+spec-1.1.0 | MIT OR Apache-2.0 | MIT | [135](#notice-135), [136](#notice-136) |
+| toml_writer | 1.1.3+spec-1.1.0 | MIT OR Apache-2.0 | MIT | [135](#notice-135), [136](#notice-136) |
+| tungstenite | 0.30.0 | MIT OR Apache-2.0 | MIT | [9](#notice-9), [165](#notice-165) |
+| typenum | 1.20.1 | MIT OR Apache-2.0 | MIT | [166](#notice-166), [167](#notice-167), [168](#notice-168) |
 | ucd-trie | 0.1.7 | MIT OR Apache-2.0 | MIT | [9](#notice-9), [5](#notice-5) |
 | unicode-ident | 1.0.26 | (MIT OR Apache-2.0) AND Unicode-3.0 | MIT AND Unicode-3.0 | [7](#notice-7), [3](#notice-3), [65](#notice-65) |
-| unicode-segmentation | 1.13.3 | MIT OR Apache-2.0 | MIT | [168](#notice-168), [9](#notice-9), [17](#notice-17) |
-| unicode-truncate | 2.0.1 | MIT OR Apache-2.0 | MIT | [168](#notice-168), [9](#notice-9), [169](#notice-169) |
-| unicode-width | 0.2.2 | MIT OR Apache-2.0 | MIT | [168](#notice-168), [9](#notice-9), [17](#notice-17) |
-| utf8parse | 0.2.2 | Apache-2.0 OR MIT | MIT | [7](#notice-7), [170](#notice-170) |
-| uuid | 1.26.1 | Apache-2.0 OR MIT | MIT | [9](#notice-9), [171](#notice-171) |
-| version_check | 0.9.5 | MIT/Apache-2.0 | MIT | [9](#notice-9), [172](#notice-172) |
-| vtparse | 0.6.2 | MIT | MIT | [173](#notice-173) |
+| unicode-segmentation | 1.13.3 | MIT OR Apache-2.0 | MIT | [169](#notice-169), [9](#notice-9), [17](#notice-17) |
+| unicode-truncate | 2.0.1 | MIT OR Apache-2.0 | MIT | [169](#notice-169), [9](#notice-9), [170](#notice-170) |
+| unicode-width | 0.2.2 | MIT OR Apache-2.0 | MIT | [169](#notice-169), [9](#notice-9), [17](#notice-17) |
+| utf8parse | 0.2.2 | Apache-2.0 OR MIT | MIT | [7](#notice-7), [171](#notice-171) |
+| uuid | 1.26.1 | Apache-2.0 OR MIT | MIT | [9](#notice-9), [172](#notice-172) |
+| version_check | 0.9.5 | MIT/Apache-2.0 | MIT | [9](#notice-9), [173](#notice-173) |
+| vtparse | 0.6.2 | MIT | MIT | [174](#notice-174) |
 | walkdir | 2.5.0 | Unlicense/MIT | MIT | [4](#notice-4), [5](#notice-5), [6](#notice-6) |
 | wasi | 0.11.1+wasi-snapshot-preview1 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT | MIT | [9](#notice-9), [94](#notice-94), [3](#notice-3) |
 | wasip2 | 1.0.4+wasi-0.2.12 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT | MIT | [9](#notice-9), [94](#notice-94), [3](#notice-3) |
@@ -224,22 +224,22 @@ Include this file, `LICENSE-MIT`, and `LICENSE-APACHE` with binary distributions
 | wasm-bindgen-macro | 0.2.129 | MIT OR Apache-2.0 | MIT | [9](#notice-9), [29](#notice-29) |
 | wasm-bindgen-macro-support | 0.2.129 | MIT OR Apache-2.0 | MIT | [9](#notice-9), [29](#notice-29) |
 | wasm-bindgen-shared | 0.2.129 | MIT OR Apache-2.0 | MIT | [9](#notice-9), [29](#notice-29) |
-| wezterm-bidi | 0.2.3 | MIT AND Unicode-DFS-2016 | MIT AND Unicode-DFS-2016 | [174](#notice-174) |
-| wezterm-blob-leases | 0.1.1 | MIT | MIT | [175](#notice-175) |
-| wezterm-color-types | 0.3.0 | MIT | MIT | [176](#notice-176) |
-| wezterm-dynamic | 0.2.1 | MIT | MIT | [177](#notice-177) |
+| wezterm-bidi | 0.2.3 | MIT AND Unicode-DFS-2016 | MIT AND Unicode-DFS-2016 | [175](#notice-175) |
+| wezterm-blob-leases | 0.1.1 | MIT | MIT | [176](#notice-176) |
+| wezterm-color-types | 0.3.0 | MIT | MIT | [177](#notice-177) |
+| wezterm-dynamic | 0.2.1 | MIT | MIT | [178](#notice-178) |
 | wezterm-dynamic-derive | 0.1.1 | MIT | MIT | [64](#notice-64) |
-| wezterm-input-types | 0.1.0 | MIT | MIT | [173](#notice-173) |
-| winapi | 0.3.9 | MIT/Apache-2.0 | MIT | [37](#notice-37), [178](#notice-178) |
-| winapi-i686-pc-windows-gnu | 0.4.0 | MIT/Apache-2.0 | MIT | [179](#notice-179), [178](#notice-178) |
+| wezterm-input-types | 0.1.0 | MIT | MIT | [174](#notice-174) |
+| winapi | 0.3.9 | MIT/Apache-2.0 | MIT | [37](#notice-37), [179](#notice-179) |
+| winapi-i686-pc-windows-gnu | 0.4.0 | MIT/Apache-2.0 | MIT | [180](#notice-180), [179](#notice-179) |
 | winapi-util | 0.1.11 | Unlicense OR MIT | MIT | [4](#notice-4), [133](#notice-133), [6](#notice-6) |
-| winapi-x86_64-pc-windows-gnu | 0.4.0 | MIT/Apache-2.0 | MIT | [179](#notice-179), [178](#notice-178) |
-| windows-link | 0.2.1 | MIT OR Apache-2.0 | MIT | [180](#notice-180), [181](#notice-181) |
-| windows-sys | 0.61.2 | MIT OR Apache-2.0 | MIT | [180](#notice-180), [181](#notice-181) |
-| winnow | 1.0.4 | MIT | MIT | [182](#notice-182) |
+| winapi-x86_64-pc-windows-gnu | 0.4.0 | MIT/Apache-2.0 | MIT | [180](#notice-180), [179](#notice-179) |
+| windows-link | 0.2.1 | MIT OR Apache-2.0 | MIT | [181](#notice-181), [182](#notice-182) |
+| windows-sys | 0.61.2 | MIT OR Apache-2.0 | MIT | [181](#notice-181), [182](#notice-182) |
+| winnow | 1.0.4 | MIT | MIT | [183](#notice-183) |
 | wit-bindgen | 0.57.1 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT | MIT | [9](#notice-9), [94](#notice-94), [3](#notice-3) |
-| yaml-rust | 0.4.5 | MIT/Apache-2.0 | MIT | [9](#notice-9), [183](#notice-183) |
-| zlib-rs | 0.6.8 | Zlib | Zlib | [184](#notice-184) |
+| yaml-rust | 0.4.5 | MIT/Apache-2.0 | MIT | [9](#notice-9), [184](#notice-184) |
+| zlib-rs | 0.6.8 | Zlib | Zlib | [185](#notice-185) |
 | zmij | 1.0.23 | MIT | MIT | [3](#notice-3) |
 
 ## License texts and attributions
@@ -2354,7 +2354,7 @@ DEALINGS IN THE SOFTWARE.
 
 ### Notice 37
 
-[crc32fast@1.5.2](https://docs.rs/crate/crc32fast/1.5.2/source/LICENSE-APACHE) · [hex@0.4.3](https://docs.rs/crate/hex/0.4.3/source/LICENSE-APACHE) · [serde_spanned@1.1.1](https://docs.rs/crate/serde_spanned/1.1.1/source/LICENSE-APACHE) · [toml@1.1.6+spec-1.1.0](https://docs.rs/crate/toml/1.1.6+spec-1.1.0/source/LICENSE-APACHE) · [toml_datetime@1.1.1+spec-1.1.0](https://docs.rs/crate/toml_datetime/1.1.1+spec-1.1.0/source/LICENSE-APACHE) · [toml_parser@1.1.3+spec-1.1.0](https://docs.rs/crate/toml_parser/1.1.3+spec-1.1.0/source/LICENSE-APACHE) · [toml_writer@1.1.2+spec-1.1.0](https://docs.rs/crate/toml_writer/1.1.2+spec-1.1.0/source/LICENSE-APACHE) · [winapi@0.3.9](https://docs.rs/crate/winapi/0.3.9/source/LICENSE-APACHE)
+[crc32fast@1.5.2](https://docs.rs/crate/crc32fast/1.5.2/source/LICENSE-APACHE) · [hex@0.4.3](https://docs.rs/crate/hex/0.4.3/source/LICENSE-APACHE) · [winapi@0.3.9](https://docs.rs/crate/winapi/0.3.9/source/LICENSE-APACHE)
 
 ````text
 Apache License
@@ -8280,7 +8280,215 @@ DEALINGS IN THE SOFTWARE.
 
 ### Notice 135
 
-[serde_spanned@1.1.1](https://docs.rs/crate/serde_spanned/1.1.1/source/LICENSE-MIT) · [toml@1.1.6+spec-1.1.0](https://docs.rs/crate/toml/1.1.6+spec-1.1.0/source/LICENSE-MIT) · [toml_datetime@1.1.1+spec-1.1.0](https://docs.rs/crate/toml_datetime/1.1.1+spec-1.1.0/source/LICENSE-MIT) · [toml_parser@1.1.3+spec-1.1.0](https://docs.rs/crate/toml_parser/1.1.3+spec-1.1.0/source/LICENSE-MIT) · [toml_writer@1.1.2+spec-1.1.0](https://docs.rs/crate/toml_writer/1.1.2+spec-1.1.0/source/LICENSE-MIT)
+[serde_spanned@1.1.2](https://docs.rs/crate/serde_spanned/1.1.2/source/LICENSE-APACHE) · [toml@1.1.8+spec-1.1.0](https://docs.rs/crate/toml/1.1.8+spec-1.1.0/source/LICENSE-APACHE) · [toml_datetime@1.1.2+spec-1.1.0](https://docs.rs/crate/toml_datetime/1.1.2+spec-1.1.0/source/LICENSE-APACHE) · [toml_parser@1.1.5+spec-1.1.0](https://docs.rs/crate/toml_parser/1.1.5+spec-1.1.0/source/LICENSE-APACHE) · [toml_writer@1.1.3+spec-1.1.0](https://docs.rs/crate/toml_writer/1.1.3+spec-1.1.0/source/LICENSE-APACHE)
+
+````text
+Apache License
+                           Version 2.0, January 2004
+                        http://www.apache.org/licenses/
+
+   TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION
+
+   1. Definitions.
+
+      "License" shall mean the terms and conditions for use, reproduction,
+      and distribution as defined by Sections 1 through 9 of this document.
+
+      "Licensor" shall mean the copyright owner or entity authorized by
+      the copyright owner that is granting the License.
+
+      "Legal Entity" shall mean the union of the acting entity and all
+      other entities that control, are controlled by, or are under common
+      control with that entity. For the purposes of this definition,
+      "control" means (i) the power, direct or indirect, to cause the
+      direction or management of such entity, whether by contract or
+      otherwise, or (ii) ownership of fifty percent (50%) or more of the
+      outstanding shares, or (iii) beneficial ownership of such entity.
+
+      "You" (or "Your") shall mean an individual or Legal Entity
+      exercising permissions granted by this License.
+
+      "Source" form shall mean the preferred form for making modifications,
+      including but not limited to software source code, documentation
+      source, and configuration files.
+
+      "Object" form shall mean any form resulting from mechanical
+      transformation or translation of a Source form, including but
+      not limited to compiled object code, generated documentation,
+      and conversions to other media types.
+
+      "Work" shall mean the work of authorship, whether in Source or
+      Object form, made available under the License, as indicated by a
+      copyright notice that is included in or attached to the work
+      (an example is provided in the Appendix below).
+
+      "Derivative Works" shall mean any work, whether in Source or Object
+      form, that is based on (or derived from) the Work and for which the
+      editorial revisions, annotations, elaborations, or other modifications
+      represent, as a whole, an original work of authorship. For the purposes
+      of this License, Derivative Works shall not include works that remain
+      separable from, or merely link (or bind by name) to the interfaces of,
+      the Work and Derivative Works thereof.
+
+      "Contribution" shall mean any work of authorship, including
+      the original version of the Work and any modifications or additions
+      to that Work or Derivative Works thereof, that is intentionally
+      submitted to Licensor for inclusion in the Work by the copyright owner
+      or by an individual or Legal Entity authorized to submit on behalf of
+      the copyright owner. For the purposes of this definition, "submitted"
+      means any form of electronic, verbal, or written communication sent
+      to the Licensor or its representatives, including but not limited to
+      communication on electronic mailing lists, source code control systems,
+      and issue tracking systems that are managed by, or on behalf of, the
+      Licensor for the purpose of discussing and improving the Work, but
+      excluding communication that is conspicuously marked or otherwise
+      designated in writing by the copyright owner as "Not a Contribution."
+
+      "Contributor" shall mean Licensor and any individual or Legal Entity
+      on behalf of whom a Contribution has been received by Licensor and
+      subsequently incorporated within the Work.
+
+   2. Grant of Copyright License. Subject to the terms and conditions of
+      this License, each Contributor hereby grants to You a perpetual,
+      worldwide, non-exclusive, no-charge, royalty-free, irrevocable
+      copyright license to reproduce, prepare Derivative Works of,
+      publicly display, publicly perform, sublicense, and distribute the
+      Work and such Derivative Works in Source or Object form.
+
+   3. Grant of Patent License. Subject to the terms and conditions of
+      this License, each Contributor hereby grants to You a perpetual,
+      worldwide, non-exclusive, no-charge, royalty-free, irrevocable
+      (except as stated in this section) patent license to make, have made,
+      use, offer to sell, sell, import, and otherwise transfer the Work,
+      where such license applies only to those patent claims licensable
+      by such Contributor that are necessarily infringed by their
+      Contribution(s) alone or by combination of their Contribution(s)
+      with the Work to which such Contribution(s) was submitted. If You
+      institute patent litigation against any entity (including a
+      cross-claim or counterclaim in a lawsuit) alleging that the Work
+      or a Contribution incorporated within the Work constitutes direct
+      or contributory patent infringement, then any patent licenses
+      granted to You under this License for that Work shall terminate
+      as of the date such litigation is filed.
+
+   4. Redistribution. You may reproduce and distribute copies of the
+      Work or Derivative Works thereof in any medium, with or without
+      modifications, and in Source or Object form, provided that You
+      meet the following conditions:
+
+      (a) You must give any other recipients of the Work or
+          Derivative Works a copy of this License; and
+
+      (b) You must cause any modified files to carry prominent notices
+          stating that You changed the files; and
+
+      (c) You must retain, in the Source form of any Derivative Works
+          that You distribute, all copyright, patent, trademark, and
+          attribution notices from the Source form of the Work,
+          excluding those notices that do not pertain to any part of
+          the Derivative Works; and
+
+      (d) If the Work includes a "NOTICE" text file as part of its
+          distribution, then any Derivative Works that You distribute must
+          include a readable copy of the attribution notices contained
+          within such NOTICE file, excluding those notices that do not
+          pertain to any part of the Derivative Works, in at least one
+          of the following places: within a NOTICE text file distributed
+          as part of the Derivative Works; within the Source form or
+          documentation, if provided along with the Derivative Works; or,
+          within a display generated by the Derivative Works, if and
+          wherever such third-party notices normally appear. The contents
+          of the NOTICE file are for informational purposes only and
+          do not modify the License. You may add Your own attribution
+          notices within Derivative Works that You distribute, alongside
+          or as an addendum to the NOTICE text from the Work, provided
+          that such additional attribution notices cannot be construed
+          as modifying the License.
+
+      You may add Your own copyright statement to Your modifications and
+      may provide additional or different license terms and conditions
+      for use, reproduction, or distribution of Your modifications, or
+      for any such Derivative Works as a whole, provided Your use,
+      reproduction, and distribution of the Work otherwise complies with
+      the conditions stated in this License.
+
+   5. Submission of Contributions. Unless You explicitly state otherwise,
+      any Contribution intentionally submitted for inclusion in the Work
+      by You to the Licensor shall be under the terms and conditions of
+      this License, without any additional terms or conditions.
+      Notwithstanding the above, nothing herein shall supersede or modify
+      the terms of any separate license agreement you may have executed
+      with Licensor regarding such Contributions.
+
+   6. Trademarks. This License does not grant permission to use the trade
+      names, trademarks, service marks, or product names of the Licensor,
+      except as required for reasonable and customary use in describing the
+      origin of the Work and reproducing the content of the NOTICE file.
+
+   7. Disclaimer of Warranty. Unless required by applicable law or
+      agreed to in writing, Licensor provides the Work (and each
+      Contributor provides its Contributions) on an "AS IS" BASIS,
+      WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+      implied, including, without limitation, any warranties or conditions
+      of TITLE, NON-INFRINGEMENT, MERCHANTABILITY, or FITNESS FOR A
+      PARTICULAR PURPOSE. You are solely responsible for determining the
+      appropriateness of using or redistributing the Work and assume any
+      risks associated with Your exercise of permissions under this License.
+
+   8. Limitation of Liability. In no event and under no legal theory,
+      whether in tort (including negligence), contract, or otherwise,
+      unless required by applicable law (such as deliberate and grossly
+      negligent acts) or agreed to in writing, shall any Contributor be
+      liable to You for damages, including any direct, indirect, special,
+      incidental, or consequential damages of any character arising as a
+      result of this License or out of the use or inability to use the
+      Work (including but not limited to damages for loss of goodwill,
+      work stoppage, computer failure or malfunction, or any and all
+      other commercial damages or losses), even if such Contributor
+      has been advised of the possibility of such damages.
+
+   9. Accepting Warranty or Additional Liability. While redistributing
+      the Work or Derivative Works thereof, You may choose to offer,
+      and charge a fee for, acceptance of support, warranty, indemnity,
+      or other liability obligations and/or rights consistent with this
+      License. However, in accepting such obligations, You may act only
+      on Your own behalf and on Your sole responsibility, not on behalf
+      of any other Contributor, and only if You agree to indemnify,
+      defend, and hold each Contributor harmless for any liability
+      incurred by, or claims asserted against, such Contributor by reason
+      of your accepting any such warranty or additional liability.
+
+   END OF TERMS AND CONDITIONS
+
+   APPENDIX: How to apply the Apache License to your work.
+
+      To apply the Apache License to your work, attach the following
+      boilerplate notice, with the fields enclosed by brackets "{}"
+      replaced with your own identifying information. (Don't include
+      the brackets!)  The text should be enclosed in the appropriate
+      comment syntax for the file format. We also recommend that a
+      file or class name and description of purpose be included on the
+      same "printed page" as the copyright notice for easier
+      identification within third-party archives.
+
+   Copyright Individual contributors
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+````
+
+### Notice 136
+
+[serde_spanned@1.1.2](https://docs.rs/crate/serde_spanned/1.1.2/source/LICENSE-MIT) · [toml@1.1.8+spec-1.1.0](https://docs.rs/crate/toml/1.1.8+spec-1.1.0/source/LICENSE-MIT) · [toml_datetime@1.1.2+spec-1.1.0](https://docs.rs/crate/toml_datetime/1.1.2+spec-1.1.0/source/LICENSE-MIT) · [toml_parser@1.1.5+spec-1.1.0](https://docs.rs/crate/toml_parser/1.1.5+spec-1.1.0/source/LICENSE-MIT) · [toml_writer@1.1.3+spec-1.1.0](https://docs.rs/crate/toml_writer/1.1.3+spec-1.1.0/source/LICENSE-MIT)
 
 ````text
 Copyright (c) Individual contributors
@@ -8304,7 +8512,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ````
 
-### Notice 136
+### Notice 137
 
 [sha1@0.11.0](https://docs.rs/crate/sha1/0.11.0/source/LICENSE-MIT)
 
@@ -8339,7 +8547,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ````
 
-### Notice 137
+### Notice 138
 
 [sha2@0.10.9](https://docs.rs/crate/sha2/0.10.9/source/LICENSE-MIT)
 
@@ -8373,7 +8581,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ````
 
-### Notice 138
+### Notice 139
 
 [signal-hook@0.3.18](https://docs.rs/crate/signal-hook/0.3.18/source/LICENSE-MIT) · [signal-hook-mio@0.2.5](https://docs.rs/crate/signal-hook-mio/0.2.5/source/LICENSE-MIT) · [signal-hook-registry@1.4.8](https://docs.rs/crate/signal-hook-registry/1.4.8/source/LICENSE-MIT)
 
@@ -8405,7 +8613,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ````
 
-### Notice 139
+### Notice 140
 
 [simd-adler32@0.3.10](https://docs.rs/crate/simd-adler32/0.3.10/source/LICENSE.md)
 
@@ -8433,7 +8641,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ````
 
-### Notice 140
+### Notice 141
 
 [siphasher@1.0.4](https://docs.rs/crate/siphasher/1.0.4/source/COPYING)
 
@@ -8447,7 +8655,7 @@ http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
 option.
 ````
 
-### Notice 141
+### Notice 142
 
 [siphasher@1.0.4](https://docs.rs/crate/siphasher/1.0.4/source/LICENSE-MIT)
 
@@ -8471,7 +8679,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ````
 
-### Notice 142
+### Notice 143
 
 [slab@0.4.12](https://docs.rs/crate/slab/0.4.12/source/LICENSE)
 
@@ -8503,7 +8711,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ````
 
-### Notice 143
+### Notice 144
 
 [smallvec@1.16.2](https://docs.rs/crate/smallvec/1.16.2/source/LICENSE-MIT)
 
@@ -8535,7 +8743,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ````
 
-### Notice 144
+### Notice 145
 
 [static_assertions@1.1.0](https://docs.rs/crate/static_assertions/1.1.0/source/LICENSE-MIT)
 
@@ -8563,7 +8771,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ````
 
-### Notice 145
+### Notice 146
 
 [strsim@0.11.1](https://docs.rs/crate/strsim/0.11.1/source/LICENSE)
 
@@ -8593,7 +8801,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ````
 
-### Notice 146
+### Notice 147
 
 [strum@0.28.0](https://docs.rs/crate/strum/0.28.0/source/LICENSE) · [strum_macros@0.28.0](https://docs.rs/crate/strum_macros/0.28.0/source/LICENSE)
 
@@ -8621,7 +8829,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ````
 
-### Notice 147
+### Notice 148
 
 [syntect@5.3.0](https://docs.rs/crate/syntect/5.3.0/source/LICENSE.txt)
 
@@ -8649,7 +8857,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ````
 
-### Notice 148
+### Notice 149
 
 [syntect@5.3.0](https://github.com/sublimehq/Packages/blob/fa6b8629c95041bf262d4c1dab95c456a0530122/LICENSE)
 
@@ -8664,7 +8872,7 @@ If not otherwise specified (see below), files in this repository fall under the 
 An exception is made for files in readable text which contain their own license information, or files where an accompanying file exists (in the same directory) with a “-license” suffix added to the base-name name of the original file, and an extension of txt, html, or similar. For example “tidy” is accompanied by “tidy-license.txt”.
 ````
 
-### Notice 149
+### Notice 150
 
 [syntect@5.3.0](https://github.com/sublimehq/Packages/blob/fa6b8629c95041bf262d4c1dab95c456a0530122/Rust/LICENSE.txt)
 
@@ -8688,7 +8896,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ````
 
-### Notice 150
+### Notice 151
 
 [syntect@5.3.0](https://github.com/sublimehq/Packages/blob/fa6b8629c95041bf262d4c1dab95c456a0530122/C%23/C%23.sublime-syntax)
 
@@ -8699,7 +8907,7 @@ Copyright (c) 2016 Sublime Text HQ Pty, @gwenzek,
 MIT license: https://opensource.org/licenses/mit-license.php
 ````
 
-### Notice 151
+### Notice 152
 
 [syntect@5.3.0](https://github.com/sublimehq/Packages/blob/fa6b8629c95041bf262d4c1dab95c456a0530122/YAML/YAML.sublime-syntax)
 
@@ -8741,7 +8949,7 @@ Acknowledgements:
   for nested block collections (`- !!seq -`).
 ````
 
-### Notice 152
+### Notice 153
 
 [syntect@5.3.0](https://github.com/sethlopezme/InspiredGitHub.tmtheme/blob/18ddb271179e118cfc2dd83abf88b915b7328a25/LICENSE)
 
@@ -8769,7 +8977,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ````
 
-### Notice 153
+### Notice 154
 
 [syntect@5.3.0](https://github.com/braver/Solarized/blob/bcd6234b4f5f96d3fd27db079268b5757053072a/LICENSE)
 
@@ -8797,7 +9005,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ````
 
-### Notice 154
+### Notice 155
 
 [syntect@5.3.0](https://github.com/kkga/spacegray/blob/2703e93f559e212ef3895edd10d861a4383ce93d/LICENSE)
 
@@ -8824,7 +9032,7 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ````
 
-### Notice 155
+### Notice 156
 
 [syntect@5.3.0](https://github.com/kkga/spacegray/blob/2703e93f559e212ef3895edd10d861a4383ce93d/base16-eighties.dark.tmTheme)
 
@@ -8833,7 +9041,7 @@ Base16 Eighties Dark
 Author: Chris Kempson (http://chriskempson.com)
 ````
 
-### Notice 156
+### Notice 157
 
 [syntect@5.3.0](https://github.com/kkga/spacegray/blob/2703e93f559e212ef3895edd10d861a4383ce93d/base16-mocha.dark.tmTheme)
 
@@ -8842,7 +9050,7 @@ Base16 Mocha Dark
 Author: Chris Kempson (http://chriskempson.com)
 ````
 
-### Notice 157
+### Notice 158
 
 [syntect@5.3.0](https://github.com/kkga/spacegray/blob/2703e93f559e212ef3895edd10d861a4383ce93d/base16-ocean.dark.tmTheme)
 
@@ -8851,7 +9059,7 @@ Base16 Ocean Dark
 Author: Chris Kempson (http://chriskempson.com)
 ````
 
-### Notice 158
+### Notice 159
 
 [syntect@5.3.0](https://github.com/kkga/spacegray/blob/2703e93f559e212ef3895edd10d861a4383ce93d/base16-ocean.light.tmTheme)
 
@@ -8860,7 +9068,7 @@ Base16 Ocean Light
 Author: Chris Kempson (http://chriskempson.com)
 ````
 
-### Notice 159
+### Notice 160
 
 [tempfile@3.27.0](https://docs.rs/crate/tempfile/3.27.0/source/LICENSE-MIT)
 
@@ -8892,7 +9100,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ````
 
-### Notice 160
+### Notice 161
 
 [termina@0.3.3](https://docs.rs/crate/termina/0.3.3/source/LICENSE-MIT)
 
@@ -8918,7 +9126,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ````
 
-### Notice 161
+### Notice 162
 
 [terminfo@0.9.0](https://docs.rs/crate/terminfo/0.9.0/source/LICENSE)
 
@@ -8938,7 +9146,7 @@ DO WHAT THE FUCK YOU WANT TO PUBLIC LICENSE
   0. You just DO WHAT THE FUCK YOU WANT TO.
 ````
 
-### Notice 162
+### Notice 163
 
 [termios@0.3.3](https://docs.rs/crate/termios/0.3.3/source/LICENSE)
 
@@ -8965,7 +9173,7 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ````
 
-### Notice 163
+### Notice 164
 
 [time@0.3.55](https://docs.rs/crate/time/0.3.55/source/LICENSE-MIT) · [time-core@0.1.9](https://docs.rs/crate/time-core/0.1.9/source/LICENSE-MIT) · [time-macros@0.2.32](https://docs.rs/crate/time-macros/0.2.32/source/LICENSE-MIT)
 
@@ -8991,7 +9199,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ````
 
-### Notice 164
+### Notice 165
 
 [tungstenite@0.30.0](https://docs.rs/crate/tungstenite/0.30.0/source/LICENSE-MIT)
 
@@ -9018,7 +9226,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ````
 
-### Notice 165
+### Notice 166
 
 [typenum@1.20.1](https://docs.rs/crate/typenum/1.20.1/source/LICENSE)
 
@@ -9026,7 +9234,7 @@ THE SOFTWARE.
 MIT OR Apache-2.0
 ````
 
-### Notice 166
+### Notice 167
 
 [typenum@1.20.1](https://docs.rs/crate/typenum/1.20.1/source/LICENSE-APACHE)
 
@@ -9234,7 +9442,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ````
 
-### Notice 167
+### Notice 168
 
 [typenum@1.20.1](https://docs.rs/crate/typenum/1.20.1/source/LICENSE-MIT)
 
@@ -9262,7 +9470,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ````
 
-### Notice 168
+### Notice 169
 
 [unicode-segmentation@1.13.3](https://docs.rs/crate/unicode-segmentation/1.13.3/source/COPYRIGHT) · [unicode-truncate@2.0.1](https://docs.rs/crate/unicode-truncate/2.0.1/source/COPYRIGHT) · [unicode-width@0.2.2](https://docs.rs/crate/unicode-width/0.2.2/source/COPYRIGHT)
 
@@ -9276,7 +9484,7 @@ notice may not be copied, modified, or distributed except
 according to those terms.
 ````
 
-### Notice 169
+### Notice 170
 
 [unicode-truncate@2.0.1](https://docs.rs/crate/unicode-truncate/2.0.1/source/LICENSE-MIT)
 
@@ -9308,7 +9516,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ````
 
-### Notice 170
+### Notice 171
 
 [utf8parse@0.2.2](https://docs.rs/crate/utf8parse/0.2.2/source/LICENSE-MIT)
 
@@ -9340,7 +9548,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ````
 
-### Notice 171
+### Notice 172
 
 [uuid@1.26.1](https://docs.rs/crate/uuid/1.26.1/source/LICENSE-MIT)
 
@@ -9373,7 +9581,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ````
 
-### Notice 172
+### Notice 173
 
 [version_check@0.9.5](https://docs.rs/crate/version_check/0.9.5/source/LICENSE-MIT)
 
@@ -9399,7 +9607,7 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ````
 
-### Notice 173
+### Notice 174
 
 [vtparse@0.6.2](https://raw.githubusercontent.com/wez/wezterm/edeae72b5fc55c7fa4aa1d08bbefd08c5493f757/LICENSE.md) · [wezterm-input-types@0.1.0](https://raw.githubusercontent.com/wez/wezterm/d5ca5509b95edc31291ba29bd1fcbf3f0b12c92d/LICENSE.md)
 
@@ -9436,7 +9644,7 @@ distributed under the terms of the OFL 1.1.
 Note that WezTerm excludes the Pomicons icon set from this collection.
 ````
 
-### Notice 174
+### Notice 175
 
 [wezterm-bidi@0.2.3](https://docs.rs/crate/wezterm-bidi/0.2.3/source/LICENSE.md)
 
@@ -9501,7 +9709,7 @@ use or other dealings in these Data Files or Software without prior
 written authorization of the copyright holder.
 ````
 
-### Notice 175
+### Notice 176
 
 [wezterm-blob-leases@0.1.1](https://docs.rs/crate/wezterm-blob-leases/0.1.1/source/LICENSE.md)
 
@@ -9529,7 +9737,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ````
 
-### Notice 176
+### Notice 177
 
 [wezterm-color-types@0.3.0](https://docs.rs/crate/wezterm-color-types/0.3.0/source/LICENSE.md)
 
@@ -9555,7 +9763,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ````
 
-### Notice 177
+### Notice 178
 
 [wezterm-dynamic@0.2.1](https://docs.rs/crate/wezterm-dynamic/0.2.1/source/LICENSE.md)
 
@@ -9583,7 +9791,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ````
 
-### Notice 178
+### Notice 179
 
 [winapi@0.3.9](https://docs.rs/crate/winapi/0.3.9/source/LICENSE-MIT) · [winapi-i686-pc-windows-gnu@0.4.0](https://docs.rs/crate/winapi/0.3.9/source/LICENSE-MIT) · [winapi-x86_64-pc-windows-gnu@0.4.0](https://docs.rs/crate/winapi/0.3.9/source/LICENSE-MIT)
 
@@ -9609,7 +9817,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ````
 
-### Notice 179
+### Notice 180
 
 [winapi-i686-pc-windows-gnu@0.4.0](https://docs.rs/crate/winapi-i686-pc-windows-gnu/0.4.0/source/src/lib.rs) · [winapi-x86_64-pc-windows-gnu@0.4.0](https://docs.rs/crate/winapi-x86_64-pc-windows-gnu/0.4.0/source/src/lib.rs)
 
@@ -9622,7 +9830,7 @@ SOFTWARE.
 // except according to those terms.
 ````
 
-### Notice 180
+### Notice 181
 
 [windows-link@0.2.1](https://docs.rs/crate/windows-link/0.2.1/source/license-apache-2.0) · [windows-sys@0.61.2](https://docs.rs/crate/windows-sys/0.61.2/source/license-apache-2.0)
 
@@ -9830,7 +10038,7 @@ Apache License
    limitations under the License.
 ````
 
-### Notice 181
+### Notice 182
 
 [windows-link@0.2.1](https://docs.rs/crate/windows-link/0.2.1/source/license-mit) · [windows-sys@0.61.2](https://docs.rs/crate/windows-sys/0.61.2/source/license-mit)
 
@@ -9858,7 +10066,7 @@ MIT License
     SOFTWARE
 ````
 
-### Notice 182
+### Notice 183
 
 [winnow@1.0.4](https://docs.rs/crate/winnow/1.0.4/source/LICENSE-MIT)
 
@@ -9883,7 +10091,7 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ````
 
-### Notice 183
+### Notice 184
 
 [yaml-rust@0.4.5](https://docs.rs/crate/yaml-rust/0.4.5/source/LICENSE-MIT)
 
@@ -9911,7 +10119,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ````
 
-### Notice 184
+### Notice 185
 
 [zlib-rs@0.6.8](https://docs.rs/crate/zlib-rs/0.6.8/source/LICENSE)
 
