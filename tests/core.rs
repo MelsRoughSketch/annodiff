@@ -384,6 +384,176 @@ fn initial_context_gaps_match_the_compared_file_boundaries() {
 }
 
 #[test]
+fn clicking_omission_labels_expands_only_the_clicked_gap() {
+    use crossterm::event::{MouseButton, MouseEvent, MouseEventKind};
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    git(root, &["init", "-q"]);
+    let original: String = (1..=100)
+        .map(|i| format!("line {i}: 日本語 context long enough to wrap in a narrow pane\n"))
+        .collect();
+    fs::write(root.join("sample.go"), &original).unwrap();
+    git(root, &["add", "."]);
+    git(
+        root,
+        &[
+            "-c",
+            "user.name=Test",
+            "-c",
+            "user.email=t@x",
+            "-c",
+            "commit.gpgsign=false",
+            "commit",
+            "-qm",
+            "base",
+        ],
+    );
+    fs::write(
+        root.join("sample.go"),
+        original
+            .replace("line 20:", "extra new line\nchanged 20:")
+            .lines()
+            .filter(|line| !line.starts_with("line 60:"))
+            .map(|line| format!("{line}\n"))
+            .collect::<String>(),
+    )
+    .unwrap();
+    for context in [0, 3] {
+        git(root, &["config", "diff.context", &context.to_string()]);
+        let snapshot = review::snapshot(root.to_str().unwrap(), "", "").unwrap();
+        let gaps = [
+            1..20 - context,
+            21 + context..60 - context,
+            61 + context..101,
+        ];
+        for (split, side) in [(false, 0), (true, 0), (true, 1)] {
+            for wrap in [false, true] {
+                for (gap, range) in gaps.iter().enumerate() {
+                    let mut review = snapshot.clone();
+                    review.split = split;
+                    review.files[0].comments.push(Comment {
+                        file: true,
+                        text: "file note".into(),
+                        ..Default::default()
+                    });
+                    let deleted = review.files[0]
+                        .lines
+                        .iter()
+                        .position(|l| l.old == 60)
+                        .unwrap();
+                    review.files[0].comments.push(Comment {
+                        start: deleted,
+                        end: deleted,
+                        side: "old".into(),
+                        text: "deleted line note".into(),
+                        ..Default::default()
+                    });
+                    let state = root.join(".git/click-context.json");
+                    review.save(&state).unwrap();
+                    let saved = fs::read(&state).unwrap();
+                    let mut app = App::new(review.clone(), state.clone());
+                    app.side = side;
+                    app.wrap = wrap;
+                    let mut terminal = Terminal::new(TestBackend::new(90, 16)).unwrap();
+                    draw(&mut app, &mut terminal);
+                    let original_rows = app.view().unwrap().rows.clone();
+                    let expected: Vec<_> = if gap == 0 {
+                        range.clone().rev().collect()
+                    } else {
+                        range.clone().collect()
+                    };
+                    for count in (10..expected.len() + 10).step_by(10) {
+                        let view = app.view().unwrap();
+                        let row = view
+                            .rows
+                            .iter()
+                            .enumerate()
+                            .filter(|(_, row)| **row == Row::Gap(true))
+                            .nth(gap)
+                            .unwrap()
+                            .0;
+                        let visual = view.visual_at(row, 0).unwrap();
+                        // Keep the old cursor elsewhere and click after manual scrolling.
+                        app.cursor[0] = 0;
+                        app.offset = visual.saturating_sub(2);
+                        app.manual_scroll[0] = true;
+                        app.focus(1);
+                        draw(&mut app, &mut terminal);
+                        let view = app.view().unwrap();
+                        let column = app.diff_inner.x
+                            + if split {
+                                // The label also occupies the split divider's column.
+                                (view.digits + view.widths[0] + 2) as u16
+                            } else {
+                                2
+                            };
+                        let y = app.diff_inner.y + (visual - app.offset) as u16;
+                        let click = |kind, row| {
+                            Event::Mouse(MouseEvent {
+                                kind,
+                                column,
+                                row,
+                                modifiers: M::NONE,
+                            })
+                        };
+                        let before = view.context_visible.clone();
+                        app.handle(click(MouseEventKind::Down(MouseButton::Left), y - 1))
+                            .unwrap();
+                        assert_eq!(app.view().unwrap().context_visible, before);
+                        app.handle(click(MouseEventKind::Down(MouseButton::Right), y))
+                            .unwrap();
+                        assert_eq!(app.view().unwrap().context_visible, before);
+                        app.handle(click(MouseEventKind::Down(MouseButton::Left), y))
+                            .unwrap();
+                        draw(&mut app, &mut terminal);
+                        app.handle(click(MouseEventKind::Drag(MouseButton::Left), y + 1))
+                            .unwrap();
+                        app.handle(click(MouseEventKind::Up(MouseButton::Left), y + 1))
+                            .unwrap();
+                        assert_eq!(app.pane, 0);
+                        assert_eq!(app.side, side);
+                        assert_eq!(app.bias, 0);
+                        assert!(app.editor.is_none());
+                        assert!(app.anchor.is_none());
+                        assert!(!app.manual_scroll[0]);
+                        assert!(
+                            (app.offset..app.offset + app.diff_inner.height as usize)
+                                .contains(&app.cursor[0])
+                        );
+                        let view = app.view().unwrap();
+                        let visible = view.context_visible.as_ref().unwrap();
+                        let file = view.expanded.as_ref().unwrap();
+                        let actual: Vec<_> = file
+                            .lines
+                            .iter()
+                            .enumerate()
+                            .filter(|(i, l)| {
+                                visible[*i] && l.new > 0 && view.original_source(*i).is_none()
+                            })
+                            .map(|(_, l)| l.old)
+                            .collect();
+                        let mut revealed: Vec<_> = expected.iter().take(count).copied().collect();
+                        revealed.sort_unstable();
+                        assert_eq!(
+                            actual, revealed,
+                            "context={context}, split={split}, side={side}, wrap={wrap}, gap={gap}"
+                        );
+                        let selected = view.display_source(app.cursor[0], side).unwrap();
+                        assert!(revealed.contains(&file.lines[selected].old));
+                        assert_eq!(app.review, review);
+                        assert_eq!(fs::read(&state).unwrap(), saved);
+                    }
+                    press(&mut app, K::Char('Z'));
+                    draw(&mut app, &mut terminal);
+                    assert!(app.view().unwrap().expanded.is_none());
+                    assert_eq!(app.view().unwrap().rows, original_rows);
+                }
+            }
+        }
+    }
+}
+
+#[test]
 fn file_expand_preserves_diff_comments_and_supports_full_file_navigation() {
     let dir = tempfile::tempdir().unwrap();
     let root = dir.path();

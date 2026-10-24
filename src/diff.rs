@@ -343,7 +343,7 @@ impl FileView {
             Some(display)
         }
     }
-    pub fn expand_near(&mut self, display: usize) -> Option<usize> {
+    pub fn expand_near(&mut self, display: usize, direction: Option<isize>) -> Option<usize> {
         let file = self.expanded.as_ref().unwrap();
         let visible = self.context_visible.get_or_insert_with(|| {
             file.lines
@@ -353,7 +353,11 @@ impl FileView {
                 .collect()
         });
         let next = (0..visible.len())
-            .filter(|i| !visible[*i])
+            .filter(|i| {
+                !visible[*i]
+                    && direction
+                        .is_none_or(|step| if step < 0 { *i < display } else { *i > display })
+            })
             .min_by_key(|i| i.abs_diff(display))?;
         let step = if next < display { -1 } else { 1 };
         let mut i = next;
@@ -560,13 +564,15 @@ impl FileView {
         let last = end.checked_sub(*start)?.checked_sub(1)?;
         Some(*start + part.min(last))
     }
-    pub fn visual_for_source(&self, source: usize, side: usize) -> Option<usize> {
-        let source = if self.expanded.is_some() {
-            *self.display_indices.get(source)?.as_ref()?
+    pub(crate) fn display_for_source(&self, source: usize) -> Option<usize> {
+        if self.expanded.is_some() {
+            self.display_indices.get(source).copied().flatten()
         } else {
-            source
-        };
-        self.visual_for_display(source, side)
+            Some(source)
+        }
+    }
+    pub fn visual_for_source(&self, source: usize, side: usize) -> Option<usize> {
+        self.visual_for_display(self.display_for_source(source)?, side)
     }
     pub fn visual_for_display(&self, source: usize, side: usize) -> Option<usize> {
         self.rows
