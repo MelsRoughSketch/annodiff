@@ -20,10 +20,21 @@ enabled. Without required checks, auto-merge can merge before CI finishes.
 Private repositories may need a paid GitHub plan for branch protection; otherwise,
 complete this setup after making the repository public.
 
-Cargo updates may fail the license-notice check until `THIRD_PARTY_NOTICES.md` is
-regenerated with `python3 licenses/generate.py` and reviewed. Push that change to
-the update branch; auto-merge waits for the required checks to pass. Required
-reviews still need human approval.
+For same-repository Dependabot Cargo PRs, CI also generates notices at the PR's
+head commit with read-only permissions and uploads changes as an artifact. After
+CI completes, `dependabot_notices.yml` commits only `THIRD_PARTY_NOTICES.md` to the
+update branch and explicitly dispatches CI there. The original notice check stays
+required, so the initial run may fail until the generated update is committed.
+The publisher runs code only from the default branch and rejects stale PR heads;
+concurrent rebases or pushes cannot be overwritten. No additional secrets are needed.
+
+Both workflows must be merged into `main` before this works. Rebase existing
+Dependabot PRs afterward to pick up the artifact-generation job. Unsupported
+licenses or supplemental changes still require manual review and regeneration;
+generation failures produce no update. Required reviews still need human approval.
+If the commit succeeds but CI dispatch fails, manually run the `CI` workflow on
+the Dependabot branch. GITHUB_TOKEN writes do not reliably start unattended PR CI;
+see [workflow triggering](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/trigger-a-workflow).
 
 See [GitHub's Dependabot automation documentation](https://docs.github.com/en/code-security/tutorials/secure-your-dependencies/automate-dependabot-with-actions).
 
