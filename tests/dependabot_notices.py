@@ -45,7 +45,7 @@ def check(*, pr=None, run=None, artifact=True, same=False, invalid=False,
         assert endpoint == 'graphql'
         commit = payload['variables']['input']
         assert commit['expectedHeadOid'] == head['sha']
-        assert commit['branch'] == {'repositoryNameWithOwner': repo, 'refName': head['ref']}
+        assert commit['branch'] == {'repositoryNameWithOwner': repo, 'branchName': head['ref']}
         assert commit['fileChanges'] == {'additions': [{
             'path': 'THIRD_PARTY_NOTICES.md', 'contents': base64.b64encode(notice).decode(),
         }]}

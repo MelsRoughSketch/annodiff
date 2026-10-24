@@ -60,7 +60,7 @@ def main():
           createCommitOnBranch(input: $input) { commit { oid } }
         }''',
         'variables': {'input': {
-            'branch': {'repositoryNameWithOwner': repo, 'refName': pr['head']['ref']},
+            'branch': {'repositoryNameWithOwner': repo, 'branchName': pr['head']['ref']},
             'expectedHeadOid': run['head_sha'],
             'message': {'headline': 'chore: regenerate third-party notices'},
             'fileChanges': {'additions': [{
