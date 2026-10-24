@@ -46,7 +46,42 @@ jobs:
         # Release CI may check an older tag that predates this workflow test.
         if: ${{ inputs.ref == '' }}
         run: python3 tests/release_workflow.py
+      - name: Check Dependabot notice automation
+        if: ${{ inputs.ref == '' }}
+        run: python3 tests/dependabot_notices.py
       - run: python3 licenses/generate.py --check
+
+  dependabot-notices:
+    name: Generate Dependabot notices
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.user.login == 'dependabot[bot]' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      startsWith(github.head_ref, 'dependabot/cargo/')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          # Generate for the source branch, not the synthetic PR merge commit.
+          ref: ${{ github.event.pull_request.head.sha }}
+      - run: rustup toolchain install stable --profile minimal && rustup default stable
+      - run: cargo fetch --locked
+      - name: Generate notices
+        id: notices
+        run: |
+          python3 licenses/generate.py
+          if ! git diff --quiet -- THIRD_PARTY_NOTICES.md; then
+            echo 'changed=true' >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/upload-artifact@v7
+        if: steps.notices.outputs.changed == 'true'
+        with:
+          name: dependabot-notices
+          path: THIRD_PARTY_NOTICES.md
+          if-no-files-found: error
+          retention-days: 7
 
   msrv:
     name: Rust 1.88 and package

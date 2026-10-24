@@ -12,6 +12,10 @@ python3 licenses/generate.py
 python3 licenses/generate.py --check
 ```
 
+Dependabot Cargo PRs get this generated update automatically through CI; see
+[Dependabot automation](../.github/RELEASING.md#dependabot-auto-merge). The normal
+notice check remains required, and generation errors still need manual review.
+
 The generator uses Python's standard library and Cargo metadata. It includes all
 resolved crates, including optional backends and other targets, deduplicates
 identical texts, and retains upstream attribution files. It selects permissive
