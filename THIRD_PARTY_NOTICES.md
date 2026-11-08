@@ -202,10 +202,10 @@ Include this file, `LICENSE-MIT`, and `LICENSE-APACHE` with binary distributions
 | time | 0.3.55 | MIT OR Apache-2.0 | MIT | [102](#notice-102), [164](#notice-164) |
 | time-core | 0.1.9 | MIT OR Apache-2.0 | MIT | [102](#notice-102), [164](#notice-164) |
 | time-macros | 0.2.32 | MIT OR Apache-2.0 | MIT | [102](#notice-102), [164](#notice-164) |
-| toml | 1.1.8+spec-1.1.0 | MIT OR Apache-2.0 | MIT | [135](#notice-135), [136](#notice-136) |
+| toml | 1.2.0+spec-1.1.0 | MIT OR Apache-2.0 | MIT | [135](#notice-135), [136](#notice-136) |
 | toml_datetime | 1.1.2+spec-1.1.0 | MIT OR Apache-2.0 | MIT | [135](#notice-135), [136](#notice-136) |
 | toml_parser | 1.1.5+spec-1.1.0 | MIT OR Apache-2.0 | MIT | [135](#notice-135), [136](#notice-136) |
-| toml_writer | 1.1.3+spec-1.1.0 | MIT OR Apache-2.0 | MIT | [135](#notice-135), [136](#notice-136) |
+| toml_writer | 1.2.0+spec-1.1.0 | MIT OR Apache-2.0 | MIT | [135](#notice-135), [136](#notice-136) |
 | tungstenite | 0.30.0 | MIT OR Apache-2.0 | MIT | [9](#notice-9), [165](#notice-165) |
 | typenum | 1.20.1 | MIT OR Apache-2.0 | MIT | [166](#notice-166), [167](#notice-167), [168](#notice-168) |
 | ucd-trie | 0.1.7 | MIT OR Apache-2.0 | MIT | [9](#notice-9), [5](#notice-5) |
@@ -8280,7 +8280,7 @@ DEALINGS IN THE SOFTWARE.
 
 ### Notice 135
 
-[serde_spanned@1.1.2](https://docs.rs/crate/serde_spanned/1.1.2/source/LICENSE-APACHE) · [toml@1.1.8+spec-1.1.0](https://docs.rs/crate/toml/1.1.8+spec-1.1.0/source/LICENSE-APACHE) · [toml_datetime@1.1.2+spec-1.1.0](https://docs.rs/crate/toml_datetime/1.1.2+spec-1.1.0/source/LICENSE-APACHE) · [toml_parser@1.1.5+spec-1.1.0](https://docs.rs/crate/toml_parser/1.1.5+spec-1.1.0/source/LICENSE-APACHE) · [toml_writer@1.1.3+spec-1.1.0](https://docs.rs/crate/toml_writer/1.1.3+spec-1.1.0/source/LICENSE-APACHE)
+[serde_spanned@1.1.2](https://docs.rs/crate/serde_spanned/1.1.2/source/LICENSE-APACHE) · [toml@1.2.0+spec-1.1.0](https://docs.rs/crate/toml/1.2.0+spec-1.1.0/source/LICENSE-APACHE) · [toml_datetime@1.1.2+spec-1.1.0](https://docs.rs/crate/toml_datetime/1.1.2+spec-1.1.0/source/LICENSE-APACHE) · [toml_parser@1.1.5+spec-1.1.0](https://docs.rs/crate/toml_parser/1.1.5+spec-1.1.0/source/LICENSE-APACHE) · [toml_writer@1.2.0+spec-1.1.0](https://docs.rs/crate/toml_writer/1.2.0+spec-1.1.0/source/LICENSE-APACHE)
 
 ````text
 Apache License
@@ -8488,7 +8488,7 @@ Apache License
 
 ### Notice 136
 
-[serde_spanned@1.1.2](https://docs.rs/crate/serde_spanned/1.1.2/source/LICENSE-MIT) · [toml@1.1.8+spec-1.1.0](https://docs.rs/crate/toml/1.1.8+spec-1.1.0/source/LICENSE-MIT) · [toml_datetime@1.1.2+spec-1.1.0](https://docs.rs/crate/toml_datetime/1.1.2+spec-1.1.0/source/LICENSE-MIT) · [toml_parser@1.1.5+spec-1.1.0](https://docs.rs/crate/toml_parser/1.1.5+spec-1.1.0/source/LICENSE-MIT) · [toml_writer@1.1.3+spec-1.1.0](https://docs.rs/crate/toml_writer/1.1.3+spec-1.1.0/source/LICENSE-MIT)
+[serde_spanned@1.1.2](https://docs.rs/crate/serde_spanned/1.1.2/source/LICENSE-MIT) · [toml@1.2.0+spec-1.1.0](https://docs.rs/crate/toml/1.2.0+spec-1.1.0/source/LICENSE-MIT) · [toml_datetime@1.1.2+spec-1.1.0](https://docs.rs/crate/toml_datetime/1.1.2+spec-1.1.0/source/LICENSE-MIT) · [toml_parser@1.1.5+spec-1.1.0](https://docs.rs/crate/toml_parser/1.1.5+spec-1.1.0/source/LICENSE-MIT) · [toml_writer@1.2.0+spec-1.1.0](https://docs.rs/crate/toml_writer/1.2.0+spec-1.1.0/source/LICENSE-MIT)
 
 ````text
 Copyright (c) Individual contributors
